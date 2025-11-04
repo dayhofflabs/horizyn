@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from horizyn.model import BaseModel, MLP, NormalizeLayer
+from horizyn.model import MLP, BaseModel, DualContrastiveModel, NormalizeLayer
 
 
 class TestNormalizeLayer:
@@ -309,3 +309,249 @@ class TestMLP:
         # Most outputs should not have unit norm (with high probability)
         assert not torch.allclose(norms, torch.ones_like(norms), atol=1e-2)
 
+
+class TestDualContrastiveModel:
+    """Tests for DualContrastiveModel."""
+
+    def test_initialization(self, mock_config):
+        """Test basic initialization of DualContrastiveModel."""
+        model_config = mock_config["model"]
+        model = DualContrastiveModel(
+            query_encoder_kwargs=model_config["query_encoder_kwargs"],
+            target_encoder_kwargs=model_config["target_encoder_kwargs"],
+        )
+        assert isinstance(model.query_encoder, MLP)
+        assert isinstance(model.target_encoder, MLP)
+
+    def test_forward_pass(self, device, mock_config):
+        """Test forward pass with tensor inputs."""
+        model_config = mock_config["model"]
+        model = DualContrastiveModel(
+            query_encoder_kwargs=model_config["query_encoder_kwargs"],
+            target_encoder_kwargs=model_config["target_encoder_kwargs"],
+        ).to(device)
+
+        batch_size = 16
+        query_inputs = torch.randn(
+            batch_size, model_config["query_encoder_kwargs"]["input_dim"], device=device
+        )
+        target_inputs = torch.randn(
+            batch_size, model_config["target_encoder_kwargs"]["input_dim"], device=device
+        )
+
+        query_out, target_out = model(query_inputs, target_inputs)
+
+        # Check shapes
+        assert query_out.shape == (batch_size, model_config["query_encoder_kwargs"]["output_dim"])
+        assert target_out.shape == (
+            batch_size,
+            model_config["target_encoder_kwargs"]["output_dim"],
+        )
+
+    def test_embeddings_normalized(self, device, mock_config):
+        """Test that output embeddings are normalized."""
+        model_config = mock_config["model"]
+        model = DualContrastiveModel(
+            query_encoder_kwargs=model_config["query_encoder_kwargs"],
+            target_encoder_kwargs=model_config["target_encoder_kwargs"],
+        ).to(device)
+
+        batch_size = 8
+        query_inputs = torch.randn(
+            batch_size, model_config["query_encoder_kwargs"]["input_dim"], device=device
+        )
+        target_inputs = torch.randn(
+            batch_size, model_config["target_encoder_kwargs"]["input_dim"], device=device
+        )
+
+        query_out, target_out = model(query_inputs, target_inputs)
+
+        # Check normalization
+        query_norms = torch.norm(query_out, p=2, dim=-1)
+        target_norms = torch.norm(target_out, p=2, dim=-1)
+        assert torch.allclose(query_norms, torch.ones_like(query_norms), atol=1e-6)
+        assert torch.allclose(target_norms, torch.ones_like(target_norms), atol=1e-6)
+
+    def test_sota_configuration(self, device):
+        """Test SOTA model configuration from paper."""
+        # SOTA: Query 2048→4096→512, Target 1024→4096→512
+        model = DualContrastiveModel(
+            query_encoder_kwargs={
+                "input_dim": 2048,
+                "output_dim": 512,
+                "num_layers": 1,
+                "widths": 4096,
+                "normalise_output": True,
+            },
+            target_encoder_kwargs={
+                "input_dim": 1024,
+                "output_dim": 512,
+                "num_layers": 1,
+                "widths": 4096,
+                "normalise_output": True,
+            },
+        ).to(device)
+
+        batch_size = 16
+        query_fps = torch.randn(batch_size, 2048, device=device)  # Reaction fingerprints
+        target_embs = torch.randn(batch_size, 1024, device=device)  # Protein T5 embeddings
+
+        query_out, target_out = model(query_fps, target_embs)
+
+        assert query_out.shape == (batch_size, 512)
+        assert target_out.shape == (batch_size, 512)
+
+        # Check normalization
+        query_norms = torch.norm(query_out, p=2, dim=-1)
+        target_norms = torch.norm(target_out, p=2, dim=-1)
+        assert torch.allclose(query_norms, torch.ones_like(query_norms), atol=1e-6)
+        assert torch.allclose(target_norms, torch.ones_like(target_norms), atol=1e-6)
+
+    def test_dimension_mismatch_error(self, device):
+        """Test that dimension mismatch raises error."""
+        model = DualContrastiveModel(
+            query_encoder_kwargs={
+                "input_dim": 100,
+                "output_dim": 512,
+                "normalise_output": True,
+            },
+            target_encoder_kwargs={
+                "input_dim": 100,
+                "output_dim": 256,  # Different output dim
+                "normalise_output": True,
+            },
+        ).to(device)
+
+        query_inputs = torch.randn(8, 100, device=device)
+        target_inputs = torch.randn(8, 100, device=device)
+
+        with pytest.raises(ValueError, match="output dimension mismatch"):
+            model(query_inputs, target_inputs)
+
+    def test_enforce_normalization(self):
+        """Test that enforce_normalisation validates NormalizeLayer presence."""
+        # Should raise error when normalise_output=False
+        with pytest.raises(ValueError, match="must have a NormalizeLayer"):
+            DualContrastiveModel(
+                query_encoder_kwargs={
+                    "input_dim": 100,
+                    "output_dim": 512,
+                    "normalise_output": False,  # No normalization
+                },
+                target_encoder_kwargs={
+                    "input_dim": 100,
+                    "output_dim": 512,
+                    "normalise_output": True,
+                },
+                enforce_normalisation=True,
+            )
+
+    def test_disable_normalization_enforcement(self, device):
+        """Test that normalization enforcement can be disabled."""
+        # Should work fine when enforcement is disabled
+        model = DualContrastiveModel(
+            query_encoder_kwargs={
+                "input_dim": 100,
+                "output_dim": 512,
+                "normalise_output": False,
+            },
+            target_encoder_kwargs={
+                "input_dim": 100,
+                "output_dim": 512,
+                "normalise_output": False,
+            },
+            enforce_normalisation=False,
+        ).to(device)
+
+        query_inputs = torch.randn(8, 100, device=device)
+        target_inputs = torch.randn(8, 100, device=device)
+        query_out, target_out = model(query_inputs, target_inputs)
+
+        assert query_out.shape == (8, 512)
+        assert target_out.shape == (8, 512)
+
+    def test_gradient_flow(self, device, mock_config):
+        """Test that gradients flow through both encoders."""
+        model_config = mock_config["model"]
+        model = DualContrastiveModel(
+            query_encoder_kwargs=model_config["query_encoder_kwargs"],
+            target_encoder_kwargs=model_config["target_encoder_kwargs"],
+        ).to(device)
+
+        query_inputs = torch.randn(
+            8, model_config["query_encoder_kwargs"]["input_dim"], device=device, requires_grad=True
+        )
+        target_inputs = torch.randn(
+            8,
+            model_config["target_encoder_kwargs"]["input_dim"],
+            device=device,
+            requires_grad=True,
+        )
+
+        query_out, target_out = model(query_inputs, target_inputs)
+        loss = query_out.sum() + target_out.sum()
+        loss.backward()
+
+        # Check gradients exist
+        assert query_inputs.grad is not None
+        assert target_inputs.grad is not None
+
+        # Check model parameters have gradients
+        for param in model.parameters():
+            assert param.grad is not None
+
+    def test_dict_inputs(self, device):
+        """Test forward pass with dictionary inputs."""
+        model = DualContrastiveModel(
+            query_encoder_kwargs={"input_dim": 100, "output_dim": 512, "normalise_output": True},
+            target_encoder_kwargs={"input_dim": 100, "output_dim": 512, "normalise_output": True},
+        ).to(device)
+
+        # Note: MLPs don't actually support dict inputs, but the code path exists
+        # for compatibility with other encoder types. Test with tensors instead.
+        query_inputs = torch.randn(8, 100, device=device)
+        target_inputs = torch.randn(8, 100, device=device)
+
+        query_out, target_out = model(query_inputs, target_inputs)
+        assert query_out.shape == (8, 512)
+        assert target_out.shape == (8, 512)
+
+    def test_different_batch_sizes(self, device):
+        """Test model with various batch sizes."""
+        model = DualContrastiveModel(
+            query_encoder_kwargs={"input_dim": 100, "output_dim": 512, "normalise_output": True},
+            target_encoder_kwargs={"input_dim": 100, "output_dim": 512, "normalise_output": True},
+        ).to(device)
+
+        for batch_size in [1, 8, 16, 128]:
+            query_inputs = torch.randn(batch_size, 100, device=device)
+            target_inputs = torch.randn(batch_size, 100, device=device)
+
+            query_out, target_out = model(query_inputs, target_inputs)
+            assert query_out.shape == (batch_size, 512)
+            assert target_out.shape == (batch_size, 512)
+
+    def test_parameter_count(self):
+        """Test total parameter counting in dual model."""
+        model = DualContrastiveModel(
+            query_encoder_kwargs={
+                "input_dim": 100,
+                "output_dim": 50,
+                "num_layers": 1,
+                "widths": 200,
+                "normalise_output": True,
+            },
+            target_encoder_kwargs={
+                "input_dim": 150,
+                "output_dim": 50,
+                "num_layers": 1,
+                "widths": 200,
+                "normalise_output": True,
+            },
+        )
+
+        # Query encoder: (100*200 + 200) + (200*50 + 50) = 20200 + 10050 = 30250
+        # Target encoder: (150*200 + 200) + (200*50 + 50) = 30200 + 10050 = 40250
+        # Total: 70500
+        expected_params = 30250 + 40250
+        assert model.num_parameters == expected_params

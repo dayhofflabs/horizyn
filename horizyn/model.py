@@ -262,3 +262,140 @@ class MLP(BaseModel):
         # Add output layer
         self.main_nn.append(nn.Linear(prev_dim, self.output_dim, bias=bias))
 
+
+class DualContrastiveModel(BaseModel):
+    """
+    Dual encoder contrastive learning model for Horizyn.
+
+    This model uses separate encoders for query (reaction) and target (protein)
+    inputs, producing normalized embeddings for contrastive learning. This is the
+    core architecture of the Horizyn SOTA model.
+
+    The model enforces that both encoders output normalized embeddings by checking
+    for a NormalizeLayer as the final layer in each encoder.
+    """
+
+    def __init__(
+        self,
+        query_encoder_kwargs: dict[str, Any],
+        target_encoder_kwargs: dict[str, Any],
+        query_encoder: type[BaseModel] = MLP,
+        target_encoder: type[BaseModel] = MLP,
+        enforce_normalisation: bool = True,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        """
+        Initialize the DualContrastiveModel.
+
+        Args:
+            query_encoder_kwargs: Keyword arguments for query encoder (reactions).
+            target_encoder_kwargs: Keyword arguments for target encoder (proteins).
+            query_encoder: Query encoder class (default: MLP).
+            target_encoder: Target encoder class (default: MLP).
+            enforce_normalisation: Whether to enforce that encoders have normalized outputs.
+            *args: Additional arguments (must be empty).
+            **kwargs: Additional keyword arguments (must be empty).
+
+        Raises:
+            ValueError: If enforce_normalisation is True and encoders don't have
+                NormalizeLayer as final layer.
+
+        Example:
+            >>> # SOTA configuration
+            >>> model = DualContrastiveModel(
+            ...     query_encoder_kwargs={
+            ...         "input_dim": 2048,
+            ...         "output_dim": 512,
+            ...         "num_layers": 1,
+            ...         "widths": 4096,
+            ...         "normalise_output": True,
+            ...     },
+            ...     target_encoder_kwargs={
+            ...         "input_dim": 1024,
+            ...         "output_dim": 512,
+            ...         "num_layers": 1,
+            ...         "widths": 4096,
+            ...         "normalise_output": True,
+            ...     },
+            ... )
+        """
+        super().__init__(*args, **kwargs)
+        self.query_encoder = query_encoder(**query_encoder_kwargs)
+        self.target_encoder = target_encoder(**target_encoder_kwargs)
+
+        # Validate that encoders have normalized outputs
+        if enforce_normalisation:
+            if not isinstance(self.query_encoder, BaseModel):
+                raise ValueError("query_encoder must be a BaseModel instance")
+            if not isinstance(self.target_encoder, BaseModel):
+                raise ValueError("target_encoder must be a BaseModel instance")
+
+            # Check that query encoder has NormalizeLayer as last layer
+            if len(self.query_encoder.layers) == 0 or not isinstance(
+                self.query_encoder.layers[-1], NormalizeLayer
+            ):
+                raise ValueError(
+                    "query_encoder must have a NormalizeLayer as its last layer. "
+                    "Set normalise_output=True in query_encoder_kwargs."
+                )
+
+            # Check that target encoder has NormalizeLayer as last layer
+            if len(self.target_encoder.layers) == 0 or not isinstance(
+                self.target_encoder.layers[-1], NormalizeLayer
+            ):
+                raise ValueError(
+                    "target_encoder must have a NormalizeLayer as its last layer. "
+                    "Set normalise_output=True in target_encoder_kwargs."
+                )
+
+    def forward(
+        self, query_inputs: dict | torch.Tensor, target_inputs: dict | torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of the dual contrastive model.
+
+        Encodes both query and target inputs through their respective encoders.
+        Supports both tensor and dict inputs for flexibility.
+
+        Args:
+            query_inputs: Input for query encoder (reactions).
+                Can be a tensor or dict of tensors.
+            target_inputs: Input for target encoder (proteins).
+                Can be a tensor or dict of tensors.
+
+        Returns:
+            Tuple of (query_embeddings, target_embeddings), both normalized.
+
+        Raises:
+            ValueError: If query and target embeddings have different dimensions.
+
+        Example:
+            >>> query_fps = torch.randn(16, 2048)  # Reaction fingerprints
+            >>> target_embs = torch.randn(16, 1024)  # Protein T5 embeddings
+            >>> query_out, target_out = model(query_fps, target_embs)
+            >>> query_out.shape, target_out.shape
+            (torch.Size([16, 512]), torch.Size([16, 512]))
+        """
+        # Encode query inputs
+        query = (
+            self.query_encoder(**query_inputs)
+            if isinstance(query_inputs, dict)
+            else self.query_encoder(query_inputs)
+        )
+
+        # Encode target inputs
+        target = (
+            self.target_encoder(**target_inputs)
+            if isinstance(target_inputs, dict)
+            else self.target_encoder(target_inputs)
+        )
+
+        # Validate output dimensions match
+        if query.shape[1] != target.shape[1]:
+            raise ValueError(
+                f"Query and target encoder output dimension mismatch: "
+                f"query={query.shape[1]}, target={target.shape[1]}"
+            )
+
+        return query, target
