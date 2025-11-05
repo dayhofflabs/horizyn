@@ -296,6 +296,15 @@ class DualContrastiveModel(BaseModel):
 
     The model enforces that both encoders output normalized embeddings by checking
     for a NormalizeLayer as the final layer in each encoder.
+
+    Notes:
+        - Dict inputs: Dictionary inputs are forwarded to encoders via keyword
+          arguments (i.e., encoder(**inputs)). This only works if the encoder
+          classes accept those keyword arguments. The default `MLP` expects a
+          tensor input and does not consume dicts.
+        - Normalization enforcement: When `enforce_normalisation=True`, both
+          encoders must end with a `NormalizeLayer`. Custom encoders should append
+          `NormalizeLayer` as the last layer or disable enforcement explicitly.
     """
 
     def __init__(
@@ -391,7 +400,7 @@ class DualContrastiveModel(BaseModel):
             Tuple of (query_embeddings, target_embeddings), both normalized.
 
         Raises:
-            ValueError: If query and target embeddings have different dimensions.
+            ValueError: If outputs are not rank-2 or if feature dimensions differ.
 
         Example:
             >>> query_fps = torch.randn(16, 2048)  # Reaction fingerprints
@@ -414,11 +423,18 @@ class DualContrastiveModel(BaseModel):
             else self.target_encoder(target_inputs)
         )
 
+        # Validate output ranks
+        if query.ndim != 2 or target.ndim != 2:
+            raise ValueError(
+                f"Encoders must return rank-2 tensors (batch, features): "
+                f"query.shape={tuple(query.shape)}, target.shape={tuple(target.shape)}"
+            )
+
         # Validate output dimensions match
         if query.shape[1] != target.shape[1]:
             raise ValueError(
-                f"Query and target encoder output dimension mismatch: "
-                f"query={query.shape[1]}, target={target.shape[1]}"
+                f"Query and target encoder output shape mismatch: "
+                f"query.shape={tuple(query.shape)} != target.shape={tuple(target.shape)}"
             )
 
         return query, target
