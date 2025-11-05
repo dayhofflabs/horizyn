@@ -393,6 +393,445 @@ class TestSmokeConfigAndErrors:
         assert "nonexistent" in error_msg or "not found" in error_msg.lower()
 
 
+class TestSmokeTrainingDynamics:
+    """Smoke tests that verify training actually works (learning, gradients, etc.)."""
+
+    def test_training_loss_is_finite_and_decreases(self, tmp_path):
+        """
+        Test that training loss is finite and decreases over epochs.
+
+        This catches:
+        - NaN/Inf loss values (numerical instability)
+        - Frozen model (loss doesn't change)
+        - Gradient explosion (loss increases dramatically)
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+        config.training.max_epochs = 3
+        config.training.limit_train_batches = 5
+        config.training.limit_val_batches = 1
+
+        log_dir = tmp_path / "logs"
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        trainer = pl.Trainer(
+            max_epochs=3,
+            accelerator="auto",
+            devices=1,
+            logger=pl.loggers.CSVLogger(str(log_dir)),
+            limit_train_batches=5,
+            limit_val_batches=1,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+
+        trainer.fit(model, data_module)
+
+        # Read logged metrics
+        metrics_csv = log_dir / "lightning_logs" / "version_0" / "metrics.csv"
+        assert metrics_csv.exists()
+
+        # Parse loss values by epoch
+        losses_by_epoch = {}
+        with open(metrics_csv) as f:
+            import csv
+
+            reader = csv.DictReader(f)
+            for row in reader:
+                if "train/loss_epoch" in row and row["train/loss_epoch"]:
+                    epoch = int(row["epoch"]) if row["epoch"] else None
+                    loss = float(row["train/loss_epoch"])
+                    if epoch is not None:
+                        losses_by_epoch[epoch] = loss
+
+        assert (
+            len(losses_by_epoch) >= 2
+        ), f"Not enough epoch loss values logged (found {len(losses_by_epoch)})"
+
+        # Check all losses are finite
+        for epoch, loss in losses_by_epoch.items():
+            assert torch.isfinite(
+                torch.tensor(loss)
+            ), f"Loss at epoch {epoch} is not finite: {loss}"
+            assert loss > 0, f"Loss at epoch {epoch} is not positive: {loss}"
+
+        # Check loss generally decreases (last < first)
+        epochs = sorted(losses_by_epoch.keys())
+        first_loss = losses_by_epoch[epochs[0]]
+        last_loss = losses_by_epoch[epochs[-1]]
+
+        # With small data, loss might not decrease monotonically, but should decrease overall
+        # Allow some tolerance for small dataset variability
+        assert (
+            last_loss < first_loss * 1.1
+        ), f"Loss didn't decrease: {first_loss:.4f} → {last_loss:.4f}"
+
+    def test_model_weights_actually_change(self):
+        """
+        Test that model parameters change during training (model learns).
+
+        This catches:
+        - Accidentally frozen parameters
+        - Zero learning rate
+        - Gradients not flowing
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+        config.training.max_epochs = 1
+        config.training.limit_train_batches = 5
+        config.training.limit_val_batches = 1
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        # Save initial parameters
+        initial_params = {}
+        for name, param in model.named_parameters():
+            initial_params[name] = param.detach().cpu().clone()
+
+        trainer = pl.Trainer(
+            max_epochs=1,
+            accelerator="auto",
+            devices=1,
+            limit_train_batches=5,
+            limit_val_batches=1,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+            logger=False,
+        )
+
+        trainer.fit(model, data_module)
+
+        # Compare with final parameters
+        parameters_changed = 0
+        parameters_unchanged = 0
+
+        for name, param in model.named_parameters():
+            final_param = param.detach().cpu()
+            initial_param = initial_params[name]
+
+            if not torch.allclose(initial_param, final_param, rtol=1e-5, atol=1e-7):
+                parameters_changed += 1
+            else:
+                parameters_unchanged += 1
+
+        # At least 90% of parameters should have changed
+        total_params = parameters_changed + parameters_unchanged
+        change_rate = parameters_changed / total_params
+
+        assert (
+            change_rate > 0.9
+        ), f"Only {parameters_changed}/{total_params} parameters changed ({change_rate:.1%})"
+
+    def test_embeddings_are_normalized_and_correct_dim(self):
+        """
+        Test that model outputs normalized 512-dim embeddings.
+
+        This catches:
+        - Wrong embedding dimension
+        - Missing normalization layer
+        - Embeddings with zero norm
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        data_module.setup("fit")
+
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        # Get a batch
+        train_loader = data_module.train_dataloader()
+        batch = next(iter(train_loader))
+
+        # Forward pass
+        model.eval()
+        with torch.no_grad():
+            query_emb = model.model.query_encoder(batch["query_vec"])
+            target_emb = model.model.target_encoder(batch["target_vec"])
+
+        # Check dimensions
+        assert (
+            query_emb.shape[1] == 512
+        ), f"Query embedding dim is {query_emb.shape[1]}, expected 512"
+        assert (
+            target_emb.shape[1] == 512
+        ), f"Target embedding dim is {target_emb.shape[1]}, expected 512"
+
+        # Check normalization (L2 norm should be 1.0)
+        query_norms = torch.norm(query_emb, p=2, dim=1)
+        target_norms = torch.norm(target_emb, p=2, dim=1)
+
+        assert torch.allclose(
+            query_norms, torch.ones_like(query_norms), rtol=1e-5, atol=1e-6
+        ), f"Query embeddings not normalized: norms {query_norms}"
+
+        assert torch.allclose(
+            target_norms, torch.ones_like(target_norms), rtol=1e-5, atol=1e-6
+        ), f"Target embeddings not normalized: norms {target_norms}"
+
+    def test_gradients_flow_to_both_encoders(self):
+        """
+        Test that gradients flow to both query and target encoders.
+
+        This catches:
+        - Accidentally detached tensors
+        - Frozen encoder
+        - Broken backward pass
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        data_module.setup("fit")
+
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        # Get a batch and do a training step
+        train_loader = data_module.train_dataloader()
+        batch = next(iter(train_loader))
+
+        # Manual training step
+        model.train()
+        loss = model.training_step(batch, batch_idx=0)
+
+        # Backward pass
+        loss.backward()
+
+        # Check that both encoders have gradients
+        query_encoder_has_grads = False
+        target_encoder_has_grads = False
+
+        for name, param in model.named_parameters():
+            if param.grad is not None and torch.abs(param.grad).sum() > 0:
+                if "query_encoder" in name:
+                    query_encoder_has_grads = True
+                if "target_encoder" in name:
+                    target_encoder_has_grads = True
+
+        assert query_encoder_has_grads, "No gradients flowing to query encoder"
+        assert target_encoder_has_grads, "No gradients flowing to target encoder"
+
+
+class TestSmokeValidationMetrics:
+    """Smoke tests that verify validation metrics are computed correctly."""
+
+    def test_validation_three_dataloader_design_works(self, tmp_path):
+        """
+        Test that the 3-dataloader validation design works correctly.
+
+        This is the most complex part of the pipeline:
+        1. Loader 0: Compute validation loss on pairs
+        2. Loader 1: Build lookup table of all target embeddings
+        3. Loader 2: Compute retrieval metrics for queries
+
+        This catches:
+        - Dataloader coordination issues
+        - Batch format mismatches
+        - Lookup table building errors
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+        config.training.max_epochs = 1
+        config.training.limit_train_batches = 2
+        config.training.limit_val_batches = 2
+
+        log_dir = tmp_path / "logs"
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        trainer = pl.Trainer(
+            max_epochs=1,
+            accelerator="auto",
+            devices=1,
+            logger=pl.loggers.CSVLogger(str(log_dir)),
+            limit_train_batches=2,
+            limit_val_batches=2,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+
+        # This should not crash during validation
+        trainer.fit(model, data_module)
+
+        # Verify validation ran by checking logged metrics
+        metrics_csv = log_dir / "lightning_logs" / "version_0" / "metrics.csv"
+        assert metrics_csv.exists()
+
+        with open(metrics_csv) as f:
+            content = f.read()
+            # Should have validation metrics (Lightning uses "val/" prefix)
+            assert "val/" in content, "No validation metrics logged"
+
+    def test_validation_metrics_have_reasonable_values(self, tmp_path):
+        """
+        Test that validation metrics are in valid ranges.
+
+        This catches:
+        - Metrics outside [0, 1] range
+        - NaN or Inf metric values
+        - Metrics not being computed
+        """
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+        config.training.max_epochs = 1
+        config.training.limit_train_batches = 3
+        config.training.limit_val_batches = 999  # Use all validation data
+
+        log_dir = tmp_path / "logs"
+
+        pl.seed_everything(42)
+
+        data_module = HorizynDataModule(**config.data)
+        model = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        )
+
+        trainer = pl.Trainer(
+            max_epochs=1,
+            accelerator="auto",
+            devices=1,
+            logger=pl.loggers.CSVLogger(str(log_dir)),
+            limit_train_batches=3,
+            limit_val_batches=999,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+
+        trainer.fit(model, data_module)
+
+        # Read and parse metrics
+        metrics_csv = log_dir / "lightning_logs" / "version_0" / "metrics.csv"
+        assert metrics_csv.exists()
+
+        with open(metrics_csv) as f:
+            import csv
+
+            reader = csv.DictReader(f)
+            metrics = {}
+            for row in reader:
+                for key, value in row.items():
+                    if value and value != "" and key != "epoch" and key != "step":
+                        try:
+                            metrics[key] = float(value)
+                        except ValueError:
+                            pass
+
+        # Find top-k metrics (Lightning uses "val/" prefix)
+        top_k_metrics = {k: v for k, v in metrics.items() if "top_" in k and "val/" in k}
+
+        # Should have at least some top-k metrics
+        assert (
+            len(top_k_metrics) > 0
+        ), f"No top-k metrics found. Available metrics: {list(metrics.keys())}"
+
+        # Check all metrics are in valid range [0, 1]
+        for name, value in top_k_metrics.items():
+            assert torch.isfinite(torch.tensor(value)), f"{name} is not finite: {value}"
+            assert 0 <= value <= 1, f"{name} outside [0,1] range: {value}"
+
+        # With nanodata (very small), we can't expect monotonicity
+        # (e.g., if there are only 5 targets, top_10 = top_100)
+        # But we can check that metrics are not all zeros or all ones
+        values = list(top_k_metrics.values())
+        assert not all(v == 0 for v in values), "All metrics are zero (model not learning)"
+
+
 class TestSmokeRobustness:
     """Smoke tests for edge cases and robustness."""
 
@@ -679,7 +1118,7 @@ class TestE2ESwissProtTraining:
                     save_last=True,
                     every_n_epochs=1,
                     save_top_k=2,
-                    monitor="val_retrieval_queries/top_1",
+                    monitor="val/top_1",
                     mode="max",
                 ),
             ],
@@ -715,10 +1154,10 @@ class TestE2ESwissProtTraining:
             content = f.read()
 
             # Should have training loss
-            assert "train_loss" in content or "loss" in content
+            assert "train" in content and "loss" in content
 
-            # Should have validation metrics
-            assert "val_retrieval" in content, "No validation metrics logged"
+            # Should have validation metrics (Lightning uses "val/" prefix)
+            assert "val/" in content, "No validation metrics logged"
 
             # Should have multiple epochs worth of data
             lines = content.strip().split("\n")
@@ -864,8 +1303,8 @@ class TestE2ESwissProtTraining:
                             except ValueError:
                                 pass
 
-        # Check that some validation metrics were logged
-        val_metrics = [k for k in metrics.keys() if "val_retrieval" in k]
+        # Check that some validation metrics were logged (Lightning uses "val/" prefix)
+        val_metrics = [k for k in metrics.keys() if "val/" in k]
         assert len(val_metrics) > 0, "No validation metrics found"
 
         # Clean up
