@@ -385,7 +385,7 @@ class TestLoadConfig:
         config = load_config(str(config_path))
 
         # Should be able to access using dot notation
-        assert config.data.train_pairs_path == "data/train_pairs.db"
+        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
         assert config.model.query_encoder_dims == [2048, 4096, 512]
         assert config.training.learning_rate == 1e-4
 
@@ -411,7 +411,7 @@ class TestIntegration:
         assert config.seed == 123
 
         # Verify validation passed
-        assert config.data.train_pairs_path == "data/train_pairs.db"
+        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
 
     def test_config_modification_after_loading(self):
         """Test that config can be modified after loading."""

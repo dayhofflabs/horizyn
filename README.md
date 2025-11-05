@@ -94,11 +94,27 @@ The Horizyn model uses a dual-encoder architecture:
 
 ## Development
 
-Run tests:
+### Running Tests
+
+Run all tests:
 
 ```bash
 pytest tests/ -v
 ```
+
+Run integration tests only (requires nanodata):
+
+```bash
+pytest tests/test_integration.py -v
+```
+
+Run with coverage:
+
+```bash
+pytest tests/ --cov=horizyn --cov-report=html
+```
+
+### Code Quality
 
 Format code:
 
@@ -111,6 +127,38 @@ Check linting:
 
 ```bash
 flake8 horizyn/ tests/
+```
+
+### Integration Testing
+
+The repository includes a nanodata dataset (12 reactions, 11 proteins) for fast integration testing. This allows you to verify the complete training pipeline works without downloading the full SwissProt dataset:
+
+```bash
+# Run fast smoke tests using nanodata (< 1 minute on CPU)
+pytest tests/test_integration.py -v -m "not e2e"
+
+# Or run training directly with nanodata
+python train.py --config configs/nano.yaml --training.max_epochs 2
+```
+
+The nanodata files are included in the repository at `data/nanodata/`.
+
+### End-to-End (E2E) Tests
+
+Full end-to-end tests are available that use the complete SwissProt dataset (~930 MB). These tests verify the entire training pipeline with real data but take longer to run (~10-15 minutes per test):
+
+```bash
+# Download SwissProt data first
+python scripts/download_data.py
+
+# Run E2E tests (requires ~16GB RAM, GPU recommended)
+pytest tests/test_integration.py -v -m e2e
+```
+
+E2E tests are skipped by default. Run smoke tests only with:
+
+```bash
+pytest tests/test_integration.py -v -m "not e2e"
 ```
 
 ## Citation
