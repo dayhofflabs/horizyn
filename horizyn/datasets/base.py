@@ -179,6 +179,27 @@ class BaseDataset(Dataset, Generic[K]):
             return self.transforms(key, data)
         return data
 
+    def append_transforms(self, new_transform: Callable[[K, Any], Any]) -> None:
+        """
+        Append a transform to the existing transform chain.
+
+        If transforms already exist, the new transform is composed with them.
+        Otherwise, it becomes the sole transform.
+
+        Args:
+            new_transform: Transform function to append.
+        """
+        if self.transforms is None:
+            self.transforms = new_transform
+        else:
+            # Compose transforms: apply existing first, then new
+            existing = self.transforms
+
+            def composed(key: K, data: Any) -> Any:
+                return new_transform(key, existing(key, data))
+
+            self.transforms = composed
+
     def __len__(self) -> int:
         """
         Get the dataset length.
