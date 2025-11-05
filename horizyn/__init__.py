@@ -12,6 +12,7 @@ __version__ = "0.1.0"
 __author__ = "Dayhoff Labs"
 __license__ = "CC BY-NC-SA 4.0"
 
+from horizyn.config import DotDict, load_config, parse_overrides
 from horizyn.data_module import HorizynDataModule
 from horizyn.lightning_module import HorizynLitModule
 from horizyn.losses import FullBatchMLNCELoss, FullBatchNCELoss
@@ -23,6 +24,9 @@ __all__ = [
     "__version__",
     "__author__",
     "__license__",
+    "DotDict",
+    "load_config",
+    "parse_overrides",
     "HorizynDataModule",
     "HorizynLitModule",
     "DualContrastiveModel",
