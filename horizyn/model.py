@@ -5,6 +5,7 @@ This module contains the base model classes and MLP implementation used in
 the Horizyn contrastive learning model.
 """
 
+import copy
 from typing import Any
 
 import torch
@@ -203,6 +204,20 @@ class MLP(BaseModel):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
+        # Validate core hyperparameters early (fail fast)
+        if num_layers < 0:
+            raise ValueError("num_layers must be >= 0")
+        if isinstance(widths, int):
+            if widths <= 0 and num_layers > 0:
+                raise ValueError("widths must be a positive integer when num_layers > 0")
+        else:
+            if len(widths) == 0 and num_layers > 0:
+                raise ValueError("widths list must be non-empty when num_layers > 0")
+            if any(w <= 0 for w in widths):
+                raise ValueError("all hidden layer widths must be positive integers")
+        if not (0.0 <= dropout <= 1.0):
+            raise ValueError("dropout must be in the range [0.0, 1.0]")
+
         # Build the main neural network
         self._build_network(num_layers, widths, activations, use_layer_norm, dropout, bias)
 
@@ -218,12 +233,19 @@ class MLP(BaseModel):
         use_layer_norm: bool,
         dropout: float,
         bias: bool,
-    ):
+    ) -> None:
         """
         Build the main neural network structure.
 
         Constructs the layers of the MLP based on the provided parameters,
         including linear layers, activations, layer normalization, and dropout.
+
+        Notes:
+            - If `widths` is a list, its length defines the number of hidden layers
+              and overrides `num_layers`.
+            - If `activations` is provided as a single nn.Module instance, a deep copy
+              of that instance is used per hidden layer to avoid reusing the same
+              module object across layers.
 
         Args:
             num_layers: Number of hidden layers.
@@ -241,11 +263,12 @@ class MLP(BaseModel):
 
         # Ensure activations is a list
         if not isinstance(activations, list):
-            activations = [activations] * num_layers
-
-        assert (
-            len(activations) == num_layers
-        ), "Number of activations must match number of hidden layers"
+            # Use deep copies so each layer gets its own module instance
+            activations = [copy.deepcopy(activations) for _ in range(num_layers)]
+        if len(activations) != num_layers:
+            raise ValueError("Number of activations must match number of hidden layers")
+        if any(not isinstance(act, nn.Module) for act in activations):
+            raise ValueError("All activations must be instances of nn.Module")
 
         prev_dim = self.input_dim
 
