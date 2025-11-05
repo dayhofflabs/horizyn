@@ -4,13 +4,14 @@ Unit tests for retrieval metrics.
 
 import pytest
 import torch
+
 from horizyn.metrics import (
     RetrievalMetric,
-    top_k_hit_rate,
-    mean_reciprocal_rank,
-    positive_score,
-    negative_score,
     create_retrieval_metrics,
+    mean_reciprocal_rank,
+    negative_score,
+    positive_score,
+    top_k_hit_rate,
 )
 
 
@@ -81,6 +82,20 @@ class TestTopKHitRate:
         with pytest.raises(ValueError, match="expects 1D tensors"):
             top_k_hit_rate(scores, target_idx, k=1)
 
+    def test_out_of_range_target_raises(self):
+        """Targets beyond num_items should raise an error."""
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([3, -1, -1])  # 3 out of range
+        with pytest.raises(ValueError, match="out-of-range"):
+            top_k_hit_rate(scores, target_idx, k=3)
+
+    def test_wrong_dtype_target_raises(self):
+        """Non-long dtype for target indices should raise an error."""
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([1.0, -1.0])  # float
+        with pytest.raises(ValueError, match="dtype torch.long"):
+            top_k_hit_rate(scores, target_idx, k=2)
+
 
 class TestMeanReciprocalRank:
     """Tests for the mean_reciprocal_rank function."""
@@ -141,6 +156,18 @@ class TestMeanReciprocalRank:
         with pytest.raises(ValueError, match="expects 1D tensors"):
             mean_reciprocal_rank(scores, target_idx)
 
+    def test_mrr_out_of_range_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([5, -1])
+        with pytest.raises(ValueError, match="out-of-range"):
+            mean_reciprocal_rank(scores, target_idx)
+
+    def test_mrr_wrong_dtype_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([1.0, -1.0])
+        with pytest.raises(ValueError, match="dtype torch.long"):
+            mean_reciprocal_rank(scores, target_idx)
+
 
 class TestPositiveScore:
     """Tests for the positive_score function."""
@@ -185,6 +212,18 @@ class TestPositiveScore:
         with pytest.raises(ValueError, match="expects 1D tensors"):
             positive_score(scores, target_idx)
 
+    def test_positive_score_out_of_range_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([3, -1])
+        with pytest.raises(ValueError, match="out-of-range"):
+            positive_score(scores, target_idx)
+
+    def test_positive_score_wrong_dtype_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([1.0, -1.0])
+        with pytest.raises(ValueError, match="dtype torch.long"):
+            positive_score(scores, target_idx)
+
 
 class TestNegativeScore:
     """Tests for the negative_score function."""
@@ -227,6 +266,18 @@ class TestNegativeScore:
         target_idx = torch.tensor([1])
 
         with pytest.raises(ValueError, match="expects 1D tensors"):
+            negative_score(scores, target_idx)
+
+    def test_negative_score_out_of_range_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([2, 3])  # 3 out of range
+        with pytest.raises(ValueError, match="out-of-range"):
+            negative_score(scores, target_idx)
+
+    def test_negative_score_wrong_dtype_target_raises(self):
+        scores = torch.tensor([0.1, 0.9, 0.3])
+        target_idx = torch.tensor([1.0, -1.0])
+        with pytest.raises(ValueError, match="dtype torch.long"):
             negative_score(scores, target_idx)
 
 
@@ -319,6 +370,17 @@ class TestRetrievalMetric:
         target_idx = torch.tensor([1, 2])  # 1D instead of 2D
 
         with pytest.raises(ValueError, match="target_idx must also be 2D"):
+            metric(scores, target_idx)
+
+    def test_batch_first_dim_mismatch_error(self):
+        """Mismatch between batch dimension of scores and target_idx should raise."""
+        metric = RetrievalMetric(
+            metric_functional=top_k_hit_rate,
+            metric_kwargs={"k": 1},
+        )
+        scores = torch.tensor([[0.1, 0.9, 0.3], [0.9, 0.1, 0.3]])
+        target_idx = torch.tensor([[1, -1]])  # batch size 1 vs 2
+        with pytest.raises(ValueError, match="Batch size mismatch"):
             metric(scores, target_idx)
 
     def test_invalid_dimension_error(self):

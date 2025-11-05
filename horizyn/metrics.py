@@ -114,6 +114,12 @@ class RetrievalMetric:
                     "For batch scores (2D), target_idx must also be 2D. "
                     f"Got scores.shape={scores.shape}, target_idx.shape={target_idx.shape}"
                 )
+            # Ensure batch dimensions match
+            if target_idx.shape[0] != batch_size:
+                raise ValueError(
+                    "Batch size mismatch between scores and target_idx: "
+                    f"scores.shape[0]={batch_size}, target_idx.shape[0]={target_idx.shape[0]}"
+                )
 
             # Compute metric for each sample in the batch
             metric_values = []
@@ -173,8 +179,17 @@ def top_k_hit_rate(scores: Tensor, target_idx: Tensor, k: int = 100) -> Tensor:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
 
+    # Validate target index dtype and range
+    if valid_targets.numel() > 0:
+        if valid_targets.dtype != torch.long:
+            raise ValueError("target_idx must be dtype torch.long")
+    
     # Clamp k to number of items
     num_items = scores.shape[0]
+    if valid_targets.numel() > 0 and int(valid_targets.max().item()) >= num_items:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+        )
     k_clamped = min(k, num_items)
 
     # Get indices of top-K predictions
@@ -226,6 +241,13 @@ def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
+    
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+    if int(valid_targets.max().item()) >= scores.shape[0]:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
+        )
 
     # Get the sorted indices (descending order of scores)
     sorted_indices = torch.argsort(scores, descending=True)
@@ -280,6 +302,13 @@ def positive_score(scores: Tensor, target_idx: Tensor) -> Tensor:
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
+    
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+    if int(valid_targets.max().item()) >= scores.shape[0]:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
+        )
 
     # Get scores of positive items
     pos_scores = scores[valid_targets]
@@ -325,6 +354,12 @@ def negative_score(scores: Tensor, target_idx: Tensor) -> Tensor:
     neg_mask = torch.ones(num_items, dtype=torch.bool, device=scores.device)
 
     if len(valid_targets) > 0:
+        if valid_targets.dtype != torch.long:
+            raise ValueError("target_idx must be dtype torch.long")
+        if int(valid_targets.max().item()) >= num_items:
+            raise ValueError(
+                f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+            )
         neg_mask[valid_targets] = False
 
     # Get scores of negative items
