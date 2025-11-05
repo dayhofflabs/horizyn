@@ -1,0 +1,74 @@
+md5: b2493bbbaded2bd87c0608538fd2fac7
+
+frozen: true
+
+deps:
+  - path: data/eve/cain_train/pairs/cain_pairs_swissprot.db
+    repo:
+      url: https://github.com/dayhofflabs/warehouse
+      rev: main
+      rev_lock: c13b2e678937c85d9966d03d240d04bddb9cc861
+
+outs:
+  - md5: 0cf73b3ad6588fbef901a8fd40114709
+    size: 14475264
+    hash: md5
+    path: cain_pairs_swissprot.db
+
+meta:
+
+  size: 13.80 MB
+
+  date_created: '2024-08-30'
+
+  author: Daniel Martin-Alarcon
+
+  description: |-
+    Eve: The output of the rhea2uniprot pipeline, containing protein-reaction pairs
+          with reactions from Rhea 131 and proteins from Uniprot 2023_05.
+
+    Cain: The Train split of Eve (~90%, splitting pairs by reaction).
+
+    cain_pairs: The prot-rxn pairs in Cain.
+
+    cain_pairs_swissprot:
+        The above, filtered down to only include proteins from SwissProt v2023_05.
+
+    cain_pairs_swissprot.db:
+        Sqlite database, with ids (pr_id) that are unique, sequential integers.
+
+    Count: 257,733 pairs
+           192,769 unique proteins
+            10,785 unique reactions
+
+    Schema:
+      table_name="protein_to_reaction",
+      columns=[
+          ("pr_id", "INTEGER"),
+          ("reaction_id", "TEXT"),
+          ("protein_id", "TEXT"),
+          ("db_source", "TEXT"),
+      ],
+      primary_key="pr_id",
+      indexes=[
+          ("idx_on_protein_id", "protein_id"),
+          ("idx_on_reaction_id", "reaction_id"),
+      ],
+      if_table_exists="append",
+
+  transformation_source_code:
+    - https://github.com/dayhofflabs/refinery/blob/4ce026a0d1414a46d47443c27c99fc77e7ec25ca/notebooks/daniel/8_swisscain/2_swisscain.ipynb
+
+  ancestors:
+    - name: cain_pairs.db
+      file_md5_hash: 92661ae72d4364db8ebfb57b87657e5b
+      repo_url: https://github.com/dayhofflabs/warehouse
+      repo_path: data/eve/cain_train/pairs/cain_pairs.db
+      commit_hash: 5b54dd62d2d6cd3034fa7453860afe37ab502ef9
+      git_branch: main
+    - name: swissprot_202305.txt
+      file_md5_hash: 16b6b4c6671b052e007c85a099b67623
+      repo_url: https://github.com/dayhofflabs/warehouse
+      repo_path: data/elixir/uniprot/2023_05/SwissProt/swissprot_202305.txt
+      commit_hash: 5b54dd62d2d6cd3034fa7453860afe37ab502ef9
+      git_branch: main
