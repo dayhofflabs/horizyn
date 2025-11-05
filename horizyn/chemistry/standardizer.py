@@ -1,7 +1,5 @@
 """
 Molecular and reaction standardization classes.
-
-Extracted from dayhoff-tools for standalone use in Horizyn.
 """
 
 from abc import ABC, abstractmethod
@@ -26,6 +24,8 @@ def is_smiles_aromatic(smiles: str) -> bool:
     Raises:
         ValueError: If SMILES string is invalid
     """
+    if not smiles:
+        raise ValueError("empty SMILES string")
     rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
     if rdmol is None:
         raise ValueError("invalid SMILES string")
@@ -62,7 +62,12 @@ class BaseStandardizer(ABC):
         Raises:
             ValueError: If reaction string is invalid
         """
-        rdrxn = AllChem.ReactionFromSmarts(smiles, useSmiles=True)  # type: ignore
+        if not smiles:
+            raise ValueError("empty reaction SMILES/SMARTS string")
+        try:
+            rdrxn = AllChem.ReactionFromSmarts(smiles, useSmiles=True)  # type: ignore
+        except Exception as e:
+            raise ValueError(f"Invalid reaction SMILES/SMARTS: {smiles}") from e
         rdrxn1 = AllChem.ChemicalReaction()  # type: ignore
         for rdmol in rdrxn.GetReactants():
             smiles1 = Chem.MolToSmiles(rdmol, canonical=False)  # type: ignore
@@ -102,13 +107,16 @@ class HypervalentStandardizer(BaseStandardizer):
         Raises:
             ValueError: If SMILES string is invalid or sanitization fails
         """
+        if not smiles:
+            raise ValueError("empty SMILES string")
         rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
         if rdmol is None:
             raise ValueError(f"Invalid SMILES input '{smiles}'")
-        ret = Chem.SanitizeMol(rdmol, sanitizeOps=Chem.SANITIZE_CLEANUP)  # type: ignore
-        if ret > 0:
-            raise ValueError(f"Sanitization failed for SMILES input '{smiles}'")
-        return Chem.MolToSmiles(rdmol)  # type: ignore
+        try:
+            Chem.SanitizeMol(rdmol, sanitizeOps=Chem.SANITIZE_CLEANUP)  # type: ignore
+        except Exception as e:
+            raise ValueError(f"Sanitization failed for SMILES input '{smiles}'") from e
+        return Chem.MolToSmiles(rdmol, canonical=True)  # type: ignore
 
 
 class RemoveHsStandardizer(BaseStandardizer):
@@ -126,13 +134,16 @@ class RemoveHsStandardizer(BaseStandardizer):
         Raises:
             ValueError: If SMILES string is invalid or sanitization fails
         """
+        if not smiles:
+            raise ValueError("empty SMILES string")
         rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
         if rdmol is None:
             raise ValueError(f"Invalid SMILES input '{smiles}'")
         rdmol1 = Chem.RemoveHs(rdmol, sanitize=False)  # type: ignore
-        ret = Chem.SanitizeMol(rdmol1, sanitizeOps=Chem.SANITIZE_FINDRADICALS)  # type: ignore
-        if ret > 0:
-            raise ValueError(f"Sanitization failed for SMILES input '{smiles}'")
+        try:
+            Chem.SanitizeMol(rdmol1, sanitizeOps=Chem.SANITIZE_FINDRADICALS)  # type: ignore
+        except Exception as e:
+            raise ValueError(f"Sanitization failed for SMILES input '{smiles}'") from e
         return Chem.MolToSmiles(rdmol1, canonical=True)  # type: ignore
 
 
@@ -151,6 +162,8 @@ class KekulizeStandardizer(BaseStandardizer):
         Raises:
             ValueError: If SMILES string is invalid
         """
+        if not smiles:
+            raise ValueError("empty SMILES string")
         rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
         if rdmol is None:
             raise ValueError(f"Invalid SMILES input '{smiles}'")
@@ -178,11 +191,13 @@ class UnchargeStandardizer(BaseStandardizer):
         Raises:
             ValueError: If SMILES string is invalid
         """
+        if not smiles:
+            raise ValueError("empty SMILES string")
         rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
         if rdmol is None:
             raise ValueError(f"Invalid SMILES input '{smiles}'")
         rdmol1 = self._uncharger.uncharge(rdmol)
-        return Chem.MolToSmiles(rdmol1)  # type: ignore
+        return Chem.MolToSmiles(rdmol1, canonical=True)  # type: ignore
 
     def standardize_reaction(self, smiles: str) -> str:
         """Standardize reactions by removing charges and balancing with protons.
@@ -196,7 +211,12 @@ class UnchargeStandardizer(BaseStandardizer):
         Raises:
             ValueError: If reaction string is invalid
         """
-        rdrxn = AllChem.ReactionFromSmarts(smiles, useSmiles=True)  # type: ignore
+        if not smiles:
+            raise ValueError("empty reaction SMILES/SMARTS string")
+        try:
+            rdrxn = AllChem.ReactionFromSmarts(smiles, useSmiles=True)  # type: ignore
+        except Exception as e:
+            raise ValueError(f"Invalid reaction SMILES/SMARTS: {smiles}") from e
         rdrxn1 = AllChem.ChemicalReaction()  # type: ignore
 
         # Remove all explicit protons from the reaction
@@ -248,6 +268,8 @@ class MetalStandardizer(BaseStandardizer):
         Raises:
             ValueError: If SMILES string is invalid
         """
+        if not smiles:
+            raise ValueError("empty SMILES string")
         rdmol = Chem.MolFromSmiles(smiles, sanitize=False)  # type: ignore
         if rdmol is None:
             raise ValueError(f"Invalid SMILES input '{smiles}'")
@@ -255,9 +277,12 @@ class MetalStandardizer(BaseStandardizer):
         flags = Chem.SANITIZE_ALL ^ Chem.SANITIZE_PROPERTIES  # type: ignore
         if not is_smiles_aromatic(smiles):
             flags ^= Chem.SANITIZE_SETAROMATICITY  # type: ignore
-        Chem.SanitizeMol(rdmol, sanitizeOps=flags)  # type: ignore
+        try:
+            Chem.SanitizeMol(rdmol, sanitizeOps=flags)  # type: ignore
+        except Exception as e:
+            raise ValueError(f"Sanitization failed for SMILES input '{smiles}'") from e
         rdmol1 = self._disconnector.Disconnect(rdmol)
-        return Chem.MolToSmiles(rdmol1)  # type: ignore
+        return Chem.MolToSmiles(rdmol1, canonical=True)  # type: ignore
 
 
 class Standardizer(BaseStandardizer):
