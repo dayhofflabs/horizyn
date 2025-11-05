@@ -1,5 +1,5 @@
-# Horizyn SOTA Configuration
-# Reproduces the State-of-the-Art model from the paper
+# Horizyn Nano Configuration
+# Fast integration testing with minimal dataset
 
 # Random seed for reproducibility
 seed: 42
@@ -14,11 +14,11 @@ logging:
 # Data configuration
 data:
   # Paths to pre-split datasets (relative to project root)
-  # Full SwissProt dataset for SOTA training
-  train_pairs_path: data/swissprot/train_pairs.db
-  val_pairs_path: data/swissprot/val_pairs.db
-  reactions_path: data/swissprot/reactions.db
-  proteins_path: data/swissprot/proteins_t5_embeddings.h5
+  # Nanodata for fast integration testing
+  train_pairs_path: data/nanodata/train_pairs.db
+  val_pairs_path: data/nanodata/val_pairs.db
+  reactions_path: data/nanodata/reactions.db
+  proteins_path: data/nanodata/proteins_t5_embeddings.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)
