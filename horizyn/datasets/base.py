@@ -80,9 +80,7 @@ class BaseDataset(Dataset, Generic[K]):
         if self._keys is not None:
             if len(self._keys) != len(set(self._keys)):
                 duplicates = [k for k in self._keys if self._keys.count(k) > 1]
-                raise ValueError(
-                    f"Keys must be unique. Found duplicates: {set(duplicates)}"
-                )
+                raise ValueError(f"Keys must be unique. Found duplicates: {set(duplicates)}")
 
         # Validate keys and data match
         if self._keys is not None and self._array_data is not None:
@@ -158,10 +156,10 @@ class BaseDataset(Dataset, Generic[K]):
         """
         if self._key_to_idx is None:
             raise AttributeError("Key-to-idx mapping is not available.")
-        
+
         if key not in self._key_to_idx:
             raise KeyError(f"Key {key} not found in dataset.")
-        
+
         return self._key_to_idx[key]
 
     def _apply_transforms(self, key: K, data: Any) -> Any:
@@ -242,9 +240,7 @@ class BaseDataset(Dataset, Generic[K]):
         # Handle integer indexing if key_to_idx exists
         if isinstance(key, int) and self._key_to_idx is not None:
             if key < 0 or key >= len(self):
-                raise IndexError(
-                    f"Index {key} is out of bounds for dataset of length {len(self)}."
-                )
+                raise IndexError(f"Index {key} is out of bounds for dataset of length {len(self)}.")
             # Get the actual key from the index
             actual_key = self._keys[key] if self._keys is not None else key
             idx = key
@@ -331,10 +327,9 @@ class WrapperDataset(BaseDataset[K]):
         """
         # Get data from wrapped dataset
         data = self.dataset[key]
-        
+
         # Apply this wrapper's transforms
         if self.transforms is not None:
             data = self.transforms(key, data)
-        
-        return data
 
+        return data

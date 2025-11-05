@@ -253,7 +253,7 @@ class TupleDataset(BaseDataset[K]):
 
             # Get the key to use for this dataset
             dataset_key = tuple_dict[key_name]
-            
+
             # Fetch data from the dataset
             result = dataset[dataset_key]
 
@@ -273,4 +273,3 @@ class TupleDataset(BaseDataset[K]):
                 sample[output_name] = result
 
         return self._apply_transforms(key, sample)
-

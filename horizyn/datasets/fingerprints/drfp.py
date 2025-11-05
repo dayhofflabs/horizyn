@@ -130,4 +130,3 @@ class DRFPFingerprintDataset(BaseFingerprintDataset):
 
         # Convert to tensor (fps is list with single fingerprint)
         return torch.tensor(fps[0], dtype=self.dtype)
-

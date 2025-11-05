@@ -123,9 +123,7 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         try:
             fingerprint = self._generate_fingerprint(reaction_info)
         except Exception as e:
-            raise Exception(
-                f"Failed to generate fingerprint for reaction '{key}': {e}"
-            ) from e
+            raise Exception(f"Failed to generate fingerprint for reaction '{key}': {e}") from e
 
         # Apply transforms if any
         return self._apply_transforms(key, fingerprint)
@@ -158,9 +156,7 @@ class BaseFingerprintDataset(WrapperDataset[K]):
             # Convert string to dict format
             return {self.smiles_label: result}
         else:
-            raise ValueError(
-                f"Sample must be string or dict, got {type(result)}: {result}"
-            )
+            raise ValueError(f"Sample must be string or dict, got {type(result)}: {result}")
 
     def _preprocess_reaction(self, reaction_info: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -195,4 +191,3 @@ class BaseFingerprintDataset(WrapperDataset[K]):
             NotImplementedError: If not implemented by subclass.
         """
         raise NotImplementedError("Subclasses must implement _generate_fingerprint")
-

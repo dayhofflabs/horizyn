@@ -221,6 +221,7 @@ def main():
     except Exception as e:
         print(f"\n\nError during training: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -232,9 +233,10 @@ def main():
     print(f"Last checkpoint: {checkpoint_callback.last_model_path}")
     print(f"Logs saved to: {config.logging.log_dir}")
     print("\nTo resume training, use:")
-    print(f"    python train.py --config {args.config} --resume {checkpoint_callback.last_model_path}")
+    print(
+        f"    python train.py --config {args.config} --resume {checkpoint_callback.last_model_path}"
+    )
 
 
 if __name__ == "__main__":
     main()
-

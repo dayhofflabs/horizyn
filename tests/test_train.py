@@ -89,4 +89,3 @@ class TestTrainScript:
         assert "--config" in result.stdout
         assert "--seed" in result.stdout
         assert "--resume" in result.stdout
-

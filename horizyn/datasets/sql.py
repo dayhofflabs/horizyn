@@ -115,7 +115,7 @@ class SQLDataset(BaseDataset[str]):
 
         # Get keys and load data if in_memory
         keys = self._load_keys()
-        
+
         if self.in_memory:
             self._data = self._load_all_data()
         else:
@@ -128,21 +128,17 @@ class SQLDataset(BaseDataset[str]):
         """Verify that the table exists in the database."""
         cursor = self.connection.cursor()
         cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-            (self.table_name,)
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (self.table_name,)
         )
         result = cursor.fetchone()
-        
+
         if result is None:
             # Get available tables
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
             cursor.close()
             raise sqlite3.DatabaseError(
-                f"Table '{self.table_name}' not found in database. "
-                f"Available tables: {tables}"
+                f"Table '{self.table_name}' not found in database. " f"Available tables: {tables}"
             )
         cursor.close()
 
@@ -194,31 +190,31 @@ class SQLDataset(BaseDataset[str]):
     def _load_all_data(self) -> Dict[str, Dict[str, Any]]:
         """Load all data into memory as a dictionary."""
         cursor = self.connection.cursor()
-        
+
         # Build column list for query
         cols_to_select = [self.search_key] + self.columns
         cols_str = ", ".join(cols_to_select)
-        
+
         cursor.execute(f"SELECT {cols_str} FROM {self.table_name}")
-        
+
         data: Dict[str, Dict[str, Any]] = {}
         for row in cursor.fetchall():
             key = row[self.search_key]
-            
+
             # Build result dict with column values
             row_data = {}
             for col in self.columns:
                 # Apply rename if specified
                 output_name = self.rename_map.get(col, col)
                 row_data[output_name] = row[col]
-            
+
             # Handle multiple rows with same key (shouldn't happen if key is unique)
             if key in data:
                 # For now, just keep the first occurrence
                 continue
-            
+
             data[key] = row_data
-        
+
         cursor.close()
         return data
 
@@ -238,36 +234,34 @@ class SQLDataset(BaseDataset[str]):
         if self.in_memory:
             if self._data is None:
                 raise RuntimeError("Data not loaded in memory")
-            
+
             if key not in self._data:
                 raise KeyError(f"Key '{key}' not found in dataset")
-            
+
             sample = self._data[key]
         else:
             # Load from database on-the-fly
             cursor = self.connection.cursor()
-            
+
             cols_str = ", ".join(self.columns)
             cursor.execute(
-                f"SELECT {cols_str} FROM {self.table_name} WHERE {self.search_key} = ?",
-                (key,)
+                f"SELECT {cols_str} FROM {self.table_name} WHERE {self.search_key} = ?", (key,)
             )
             row = cursor.fetchone()
             cursor.close()
-            
+
             if row is None:
                 raise KeyError(f"Key '{key}' not found in table '{self.table_name}'")
-            
+
             # Build result dict
             sample = {}
             for col in self.columns:
                 output_name = self.rename_map.get(col, col)
                 sample[output_name] = row[col]
-        
+
         return self._apply_transforms(key, sample)
 
     def __del__(self):
         """Close database connection when dataset is destroyed."""
-        if hasattr(self, 'connection') and self.connection is not None:
+        if hasattr(self, "connection") and self.connection is not None:
             self.connection.close()
-

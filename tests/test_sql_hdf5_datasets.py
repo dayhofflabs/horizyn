@@ -21,16 +21,18 @@ class TestSQLDataset:
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
-        
+
         # Create reactions table
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE reactions (
                 reaction_id TEXT PRIMARY KEY,
                 reaction_smiles TEXT,
                 ec_number TEXT
             )
-        """)
-        
+        """
+        )
+
         # Insert sample data
         cursor.executemany(
             "INSERT INTO reactions VALUES (?, ?, ?)",
@@ -38,30 +40,32 @@ class TestSQLDataset:
                 ("rxn1", "CCO.O>>CC=O", "1.1.1.1"),
                 ("rxn2", "C.O>>CO", "2.2.2.2"),
                 ("rxn3", "CC>>C=C", "3.3.3.3"),
-            ]
+            ],
         )
-        
+
         # Create pairs table
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE pairs (
                 pair_id TEXT PRIMARY KEY,
                 query_id TEXT,
                 target_id TEXT
             )
-        """)
-        
+        """
+        )
+
         cursor.executemany(
             "INSERT INTO pairs VALUES (?, ?, ?)",
             [
                 ("pair1", "rxn1", "prot1"),
                 ("pair2", "rxn2", "prot2"),
                 ("pair3", "rxn1", "prot3"),
-            ]
+            ],
         )
-        
+
         conn.commit()
         conn.close()
-        
+
         return db_path
 
     def test_initialization(self, sample_db):
@@ -71,9 +75,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         assert len(dataset) == 3
         assert "rxn1" in dataset.keys
         assert "rxn2" in dataset.keys
@@ -86,9 +90,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns="reaction_smiles",
-            in_memory=True
+            in_memory=True,
         )
-        
+
         sample = dataset["rxn1"]
         assert sample == {"reaction_smiles": "CCO.O>>CC=O"}
 
@@ -99,9 +103,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles", "ec_number"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         sample = dataset["rxn2"]
         assert sample == {"reaction_smiles": "C.O>>CO", "ec_number": "2.2.2.2"}
 
@@ -112,9 +116,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=None,  # Load all columns
-            in_memory=True
+            in_memory=True,
         )
-        
+
         sample = dataset["rxn1"]
         assert "reaction_smiles" in sample
         assert "ec_number" in sample
@@ -128,9 +132,9 @@ class TestSQLDataset:
             search_key="reaction_id",
             columns=["reaction_smiles"],
             rename_map={"reaction_smiles": "smiles"},
-            in_memory=True
+            in_memory=True,
         )
-        
+
         sample = dataset["rxn1"]
         assert "smiles" in sample
         assert "reaction_smiles" not in sample
@@ -141,25 +145,21 @@ class TestSQLDataset:
             SQLDataset(
                 file_path=str(tmp_path / "nonexistent.db"),
                 table_name="reactions",
-                search_key="reaction_id"
+                search_key="reaction_id",
             )
 
     def test_table_not_found(self, sample_db):
         """Test that missing table raises error."""
         with pytest.raises(sqlite3.DatabaseError, match="Table.*not found"):
             SQLDataset(
-                file_path=str(sample_db),
-                table_name="nonexistent_table",
-                search_key="reaction_id"
+                file_path=str(sample_db), table_name="nonexistent_table", search_key="reaction_id"
             )
 
     def test_search_key_not_found(self, sample_db):
         """Test that missing search_key column raises error."""
         with pytest.raises(sqlite3.DatabaseError, match="Search key.*not found"):
             SQLDataset(
-                file_path=str(sample_db),
-                table_name="reactions",
-                search_key="nonexistent_column"
+                file_path=str(sample_db), table_name="reactions", search_key="nonexistent_column"
             )
 
     def test_column_not_found(self, sample_db):
@@ -169,7 +169,7 @@ class TestSQLDataset:
                 file_path=str(sample_db),
                 table_name="reactions",
                 search_key="reaction_id",
-                columns=["nonexistent_column"]
+                columns=["nonexistent_column"],
             )
 
     def test_key_not_found(self, sample_db):
@@ -179,9 +179,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         with pytest.raises(KeyError, match="not found"):
             dataset["nonexistent_rxn"]
 
@@ -192,9 +192,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         assert dataset.in_memory is True
         assert dataset._data is not None
         assert len(dataset._data) == 3
@@ -206,12 +206,12 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=False
+            in_memory=False,
         )
-        
+
         assert dataset.in_memory is False
         assert dataset._data is None
-        
+
         # Should still be able to access data
         sample = dataset["rxn1"]
         assert sample == {"reaction_smiles": "CCO.O>>CC=O"}
@@ -223,14 +223,14 @@ class TestSQLDataset:
             table_name="pairs",
             search_key="pair_id",
             columns=["query_id", "target_id"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         assert len(dataset) == 3
-        
+
         pair1 = dataset["pair1"]
         assert pair1 == {"query_id": "rxn1", "target_id": "prot1"}
-        
+
         pair2 = dataset["pair2"]
         assert pair2 == {"query_id": "rxn2", "target_id": "prot2"}
 
@@ -241,9 +241,9 @@ class TestSQLDataset:
             table_name="reactions",
             search_key="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True
+            in_memory=True,
         )
-        
+
         items = [dataset[key] for key in dataset.keys]
         assert len(items) == 3
 
@@ -255,27 +255,24 @@ class TestEmbedDataset:
     def sample_hdf5(self, tmp_path):
         """Create a sample HDF5 file for testing."""
         h5_path = tmp_path / "test_embeddings.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
+
+        with h5py.File(str(h5_path), "w") as f:
             # Create ids dataset
-            ids = np.array([b"prot1", b"prot2", b"prot3"], dtype='S10')
-            f.create_dataset('ids', data=ids)
-            
+            ids = np.array([b"prot1", b"prot2", b"prot3"], dtype="S10")
+            f.create_dataset("ids", data=ids)
+
             # Create vectors dataset (3 proteins, 512-dim embeddings)
             vectors = np.random.randn(3, 512).astype(np.float32)
-            f.create_dataset('vectors', data=vectors)
-        
+            f.create_dataset("vectors", data=vectors)
+
         return h5_path, vectors
 
     def test_initialization(self, sample_hdf5):
         """Test basic initialization."""
         h5_path, _ = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
         assert len(dataset) == 3
         assert "prot1" in dataset.keys
         assert "prot2" in dataset.keys
@@ -286,12 +283,9 @@ class TestEmbedDataset:
     def test_getitem(self, sample_hdf5):
         """Test accessing embeddings."""
         h5_path, original_vectors = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
         embed1 = dataset["prot1"]
         assert embed1.shape == (512,)
         assert torch.allclose(embed1, torch.from_numpy(original_vectors[0]), atol=1e-5)
@@ -299,12 +293,9 @@ class TestEmbedDataset:
     def test_in_memory_true(self, sample_hdf5):
         """Test in-memory loading."""
         h5_path, _ = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
         assert dataset.in_memory is True
         assert dataset.data is not None
         assert dataset.data.shape == (3, 512)
@@ -313,16 +304,13 @@ class TestEmbedDataset:
     def test_in_memory_false(self, sample_hdf5):
         """Test on-the-fly loading from HDF5."""
         h5_path, original_vectors = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=False
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=False)
+
         assert dataset.in_memory is False
         assert dataset.data is None
         assert dataset.file is not None  # File should be open
-        
+
         # Should still be able to access data
         embed1 = dataset["prot1"]
         assert torch.allclose(embed1, torch.from_numpy(original_vectors[0]), atol=1e-5)
@@ -330,21 +318,13 @@ class TestEmbedDataset:
     def test_dtype(self, sample_hdf5):
         """Test different data types."""
         h5_path, _ = sample_hdf5
-        
+
         # Test float32 (default)
-        dataset_f32 = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True,
-            dtype=torch.float32
-        )
+        dataset_f32 = EmbedDataset(file_path=str(h5_path), in_memory=True, dtype=torch.float32)
         assert dataset_f32["prot1"].dtype == torch.float32
-        
+
         # Test float64
-        dataset_f64 = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True,
-            dtype=torch.float64
-        )
+        dataset_f64 = EmbedDataset(file_path=str(h5_path), in_memory=True, dtype=torch.float64)
         assert dataset_f64["prot1"].dtype == torch.float64
 
     def test_file_not_found(self, tmp_path):
@@ -355,62 +335,56 @@ class TestEmbedDataset:
     def test_missing_ids_dataset(self, tmp_path):
         """Test that missing 'ids' dataset raises error."""
         h5_path = tmp_path / "missing_ids.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
+
+        with h5py.File(str(h5_path), "w") as f:
             vectors = np.random.randn(3, 512).astype(np.float32)
-            f.create_dataset('vectors', data=vectors)
+            f.create_dataset("vectors", data=vectors)
             # No 'ids' dataset
-        
+
         with pytest.raises(KeyError, match="ids.*not found"):
             EmbedDataset(file_path=str(h5_path))
 
     def test_missing_vectors_dataset(self, tmp_path):
         """Test that missing 'vectors' dataset raises error."""
         h5_path = tmp_path / "missing_vectors.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
-            ids = np.array([b"prot1", b"prot2"], dtype='S10')
-            f.create_dataset('ids', data=ids)
+
+        with h5py.File(str(h5_path), "w") as f:
+            ids = np.array([b"prot1", b"prot2"], dtype="S10")
+            f.create_dataset("ids", data=ids)
             # No 'vectors' dataset
-        
+
         with pytest.raises(KeyError, match="vectors.*not found"):
             EmbedDataset(file_path=str(h5_path))
 
     def test_mismatched_lengths(self, tmp_path):
         """Test that mismatched ids/vectors lengths raise error."""
         h5_path = tmp_path / "mismatched.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
-            ids = np.array([b"prot1", b"prot2"], dtype='S10')
-            f.create_dataset('ids', data=ids)
-            
+
+        with h5py.File(str(h5_path), "w") as f:
+            ids = np.array([b"prot1", b"prot2"], dtype="S10")
+            f.create_dataset("ids", data=ids)
+
             vectors = np.random.randn(3, 512).astype(np.float32)  # 3 != 2
-            f.create_dataset('vectors', data=vectors)
-        
+            f.create_dataset("vectors", data=vectors)
+
         with pytest.raises(ValueError, match="Mismatch"):
             EmbedDataset(file_path=str(h5_path))
 
     def test_key_not_found(self, sample_hdf5):
         """Test that accessing non-existent key raises error."""
         h5_path, _ = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
         with pytest.raises(KeyError):
             dataset["nonexistent_prot"]
 
     def test_all_embeddings_accessible(self, sample_hdf5):
         """Test that all embeddings can be accessed."""
         h5_path, original_vectors = sample_hdf5
-        
-        dataset = EmbedDataset(
-            file_path=str(h5_path),
-            in_memory=True
-        )
-        
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
         for i, key in enumerate(dataset.keys):
             embed = dataset[key]
             expected = torch.from_numpy(original_vectors[i]).to(torch.float32)
@@ -419,34 +393,34 @@ class TestEmbedDataset:
     def test_large_embedding_dim(self, tmp_path):
         """Test with larger embedding dimensions (e.g., T5)."""
         h5_path = tmp_path / "large_embeds.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
-            ids = np.array([b"prot1", b"prot2"], dtype='S10')
-            f.create_dataset('ids', data=ids)
-            
+
+        with h5py.File(str(h5_path), "w") as f:
+            ids = np.array([b"prot1", b"prot2"], dtype="S10")
+            f.create_dataset("ids", data=ids)
+
             # T5-like dimension (1024)
             vectors = np.random.randn(2, 1024).astype(np.float32)
-            f.create_dataset('vectors', data=vectors)
-        
+            f.create_dataset("vectors", data=vectors)
+
         dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
-        
+
         assert dataset.vec_dim == 1024
         assert dataset["prot1"].shape == (1024,)
 
     def test_string_ids(self, tmp_path):
         """Test with different ID formats (strings vs bytes)."""
         h5_path = tmp_path / "string_ids.h5"
-        
-        with h5py.File(str(h5_path), 'w') as f:
+
+        with h5py.File(str(h5_path), "w") as f:
             # Use variable-length string type
             ids = np.array(["protein_001", "protein_002"], dtype=h5py.string_dtype())
-            f.create_dataset('ids', data=ids)
-            
+            f.create_dataset("ids", data=ids)
+
             vectors = np.random.randn(2, 512).astype(np.float32)
-            f.create_dataset('vectors', data=vectors)
-        
+            f.create_dataset("vectors", data=vectors)
+
         dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
-        
+
         assert "protein_001" in dataset.keys
         assert "protein_002" in dataset.keys
         assert dataset["protein_001"].shape == (512,)
@@ -461,46 +435,44 @@ class TestSQLAndHDF5Integration:
         pairs_db = tmp_path / "pairs.db"
         conn = sqlite3.connect(str(pairs_db))
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE pairs (
                 pair_id TEXT PRIMARY KEY,
                 query_id TEXT,
                 target_id TEXT
             )
-        """)
+        """
+        )
         cursor.executemany(
             "INSERT INTO pairs VALUES (?, ?, ?)",
-            [("pair1", "rxn1", "prot1"), ("pair2", "rxn2", "prot2")]
+            [("pair1", "rxn1", "prot1"), ("pair2", "rxn2", "prot2")],
         )
         conn.commit()
         conn.close()
-        
+
         # Create embeddings HDF5
         embeds_h5 = tmp_path / "embeddings.h5"
-        with h5py.File(str(embeds_h5), 'w') as f:
-            ids = np.array([b"prot1", b"prot2"], dtype='S10')
-            f.create_dataset('ids', data=ids)
+        with h5py.File(str(embeds_h5), "w") as f:
+            ids = np.array([b"prot1", b"prot2"], dtype="S10")
+            f.create_dataset("ids", data=ids)
             vectors = np.random.randn(2, 512).astype(np.float32)
-            f.create_dataset('vectors', data=vectors)
-        
+            f.create_dataset("vectors", data=vectors)
+
         # Load datasets
         pairs = SQLDataset(
             file_path=str(pairs_db),
             table_name="pairs",
             search_key="pair_id",
             columns=["query_id", "target_id"],
-            in_memory=True
+            in_memory=True,
         )
-        
-        embeds = EmbedDataset(
-            file_path=str(embeds_h5),
-            in_memory=True
-        )
-        
+
+        embeds = EmbedDataset(file_path=str(embeds_h5), in_memory=True)
+
         # Test accessing related data
         pair1 = pairs["pair1"]
         target_id = pair1["target_id"]
         embedding = embeds[target_id]
-        
-        assert embedding.shape == (512,)
 
+        assert embedding.shape == (512,)

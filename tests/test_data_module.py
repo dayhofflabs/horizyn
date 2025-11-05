@@ -208,4 +208,3 @@ class TestHorizynDataModule:
 
         with pytest.raises(RuntimeError, match="not setup"):
             dm.val_dataloader()
-

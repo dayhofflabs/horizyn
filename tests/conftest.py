@@ -8,12 +8,11 @@ import numpy as np
 def pytest_configure(config):
     """Register custom pytest markers."""
     config.addinivalue_line(
-        "markers",
-        "integration: mark test as an integration test (runs by default)"
+        "markers", "integration: mark test as an integration test (runs by default)"
     )
     config.addinivalue_line(
         "markers",
-        "e2e: mark test as an end-to-end test requiring full SwissProt data (slow, skipped by default)"
+        "e2e: mark test as an end-to-end test requiring full SwissProt data (slow, skipped by default)",
     )
 
 
@@ -99,4 +98,3 @@ def mock_config():
             "num_workers": 0,
         },
     }
-

@@ -26,4 +26,3 @@ __all__ = [
     "UnchargeStandardizer",
     "is_smiles_aromatic",
 ]
-

@@ -51,8 +51,7 @@ class ConcatTensorTransform:
         for label in self.labels:
             if label not in data:
                 raise KeyError(
-                    f"Label '{label}' not found in data. "
-                    f"Available keys: {list(data.keys())}"
+                    f"Label '{label}' not found in data. " f"Available keys: {list(data.keys())}"
                 )
             tensors.append(data[label])
 
@@ -62,7 +61,5 @@ class ConcatTensorTransform:
         except Exception as e:
             shapes = [t.shape for t in tensors]
             raise ValueError(
-                f"Failed to concatenate tensors with shapes {shapes} "
-                f"along dim {self.dim}: {e}"
+                f"Failed to concatenate tensors with shapes {shapes} " f"along dim {self.dim}: {e}"
             ) from e
-
