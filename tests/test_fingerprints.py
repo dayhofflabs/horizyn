@@ -4,6 +4,7 @@ Unit tests for fingerprint generation datasets.
 
 import pytest
 import torch
+
 from horizyn.datasets import BaseDataset
 from horizyn.datasets.fingerprints import (
     BaseFingerprintDataset,
@@ -141,6 +142,7 @@ class TestBaseFingerprintDatasetCaching:
         assert torch.equal(fp1, fp2)
         # Ensure only one compute occurred
         assert ds.calls == 1
+
 
 class TestRDKitPlusFingerprintDataset:
     """Tests for the RDKitPlusFingerprintDataset class."""

@@ -191,6 +191,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -226,6 +227,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -246,6 +248,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     # Missing target_encoder_dims
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -266,6 +269,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {},  # Missing max_epochs
             }
@@ -286,6 +290,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": "100"},  # Wrong type (string)
             }
@@ -306,6 +311,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": "2048,4096,512",  # Wrong type (string)
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
