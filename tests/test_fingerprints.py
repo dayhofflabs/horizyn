@@ -88,6 +88,60 @@ class TestBaseFingerprintDataset:
             fp_dataset["rxn1"]
 
 
+class TestBaseFingerprintDatasetCaching:
+    """Tests for in-memory caching behavior in BaseFingerprintDataset."""
+
+    class DummyFingerprintDataset(BaseFingerprintDataset):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.calls = 0
+
+        def _generate_fingerprint(self, reaction_info):  # type: ignore[override]
+            self.calls += 1
+            # Return a deterministic fingerprint based on SMILES length
+            length = len(reaction_info[self.smiles_label])
+            return torch.ones(self.vec_dim, dtype=self.dtype) * float(length)
+
+    def test_caches_results_per_key(self):
+        reactions = BaseDataset(
+            keys=["a", "b"],
+            array_data=[
+                {"reaction_smiles": "CCO>>CC=O"},
+                {"reaction_smiles": "C>>CC"},
+            ],
+        )
+
+        ds = self.DummyFingerprintDataset(reaction_dataset=reactions, vec_dim=16)
+
+        # First access should compute
+        fp_a1 = ds["a"]
+        assert ds.calls == 1
+
+        # Second access to same key should hit cache (no new compute)
+        fp_a2 = ds["a"]
+        assert ds.calls == 1
+        assert torch.equal(fp_a1, fp_a2)
+
+        # Access different key should compute again
+        _ = ds["b"]
+        assert ds.calls == 2
+
+    def test_cache_with_transforms(self):
+        reactions = BaseDataset(keys=["a"], array_data=[{"reaction_smiles": "CCO>>CC=O"}])
+
+        def add_one(_key, tensor: torch.Tensor) -> torch.Tensor:
+            return tensor + 1.0
+
+        ds = self.DummyFingerprintDataset(reaction_dataset=reactions, vec_dim=8, transforms=add_one)
+
+        # First call computes and applies transform
+        fp1 = ds["a"]
+        # Second call should use cached raw fp and re-apply transform
+        fp2 = ds["a"]
+        assert torch.equal(fp1, fp2)
+        # Ensure only one compute occurred
+        assert ds.calls == 1
+
 class TestRDKitPlusFingerprintDataset:
     """Tests for the RDKitPlusFingerprintDataset class."""
 

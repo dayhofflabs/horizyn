@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Optional
 import torch
 from horizyn.datasets.base import BaseDataset, WrapperDataset, K
 from horizyn.chemistry.standardizer import Standardizer
+from horizyn.utils.cache import InMemoryCache
 
 
 class BaseFingerprintDataset(WrapperDataset[K]):
@@ -84,6 +85,9 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         # Initialize wrapper
         super().__init__(reaction_dataset, transforms=transforms, **kwargs)
 
+        # Initialize in-memory cache for fingerprints
+        self._cache: InMemoryCache = InMemoryCache()
+
         # Initialize standardizer if enabled
         self._standardizer = None
         if self.standardize:
@@ -113,17 +117,23 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         Raises:
             Exception: If fingerprint generation fails.
         """
+        # Return cached fingerprint if available (apply transforms on top)
+        if self._cache.has(key):
+            return self._apply_transforms(key, self._cache.get(key))
+
         # Get reaction info from wrapped dataset
         reaction_info = self._query_smiles_dataset(key)
 
         # Standardize if enabled
         reaction_info = self._preprocess_reaction(reaction_info)
 
-        # Generate fingerprint
+        # Generate and cache fingerprint
         try:
             fingerprint = self._generate_fingerprint(reaction_info)
         except Exception as e:
             raise Exception(f"Failed to generate fingerprint for reaction '{key}': {e}") from e
+
+        self._cache.set(key, fingerprint)
 
         # Apply transforms if any
         return self._apply_transforms(key, fingerprint)
