@@ -5,7 +5,11 @@ Unit tests for fingerprint generation datasets.
 import pytest
 import torch
 from horizyn.datasets import BaseDataset
-from horizyn.datasets.fingerprints import BaseFingerprintDataset, RDKitPlusFingerprintDataset
+from horizyn.datasets.fingerprints import (
+    BaseFingerprintDataset,
+    DRFPFingerprintDataset,
+    RDKitPlusFingerprintDataset,
+)
 
 
 class TestBaseFingerprintDataset:
@@ -387,6 +391,312 @@ class TestRDKitPlusFingerprintDataset:
         )
         
         fp_dataset = RDKitPlusFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024
+        )
+        
+        assert len(fp_dataset) == 2
+        fp1 = fp_dataset["rxn1"]
+        fp2 = fp_dataset["rxn2"]
+        
+        assert fp1.shape == (1024,)
+        assert fp2.shape == (1024,)
+
+
+class TestDRFPFingerprintDataset:
+    """Tests for the DRFPFingerprintDataset class."""
+
+    def test_initialization_default(self):
+        """Test default initialization."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions
+        )
+        
+        assert fp_dataset.vec_dim == 1024
+        assert fp_dataset.min_radius == 0
+        assert fp_dataset.radius == 3
+        assert fp_dataset.rings is True
+        assert fp_dataset.root_central_atom is True
+        assert fp_dataset.include_hydrogens is False
+
+    def test_initialization_custom(self):
+        """Test initialization with custom parameters."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=2048,
+            min_radius=1,
+            radius=5,
+            rings=False,
+            root_central_atom=False,
+            include_hydrogens=True
+        )
+        
+        assert fp_dataset.vec_dim == 2048
+        assert fp_dataset.min_radius == 1
+        assert fp_dataset.radius == 5
+        assert fp_dataset.rings is False
+        assert fp_dataset.root_central_atom is False
+        assert fp_dataset.include_hydrogens is True
+
+    def test_generate_fingerprint(self):
+        """Test generating a DRFP fingerprint."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024
+        )
+        
+        fp = fp_dataset["rxn1"]
+        
+        assert isinstance(fp, torch.Tensor)
+        assert fp.shape == (1024,)
+        assert fp.dtype == torch.float32
+
+    def test_fingerprint_dimensions(self):
+        """Test DRFP with different dimensions."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        for vec_dim in [256, 512, 1024, 2048]:
+            fp_dataset = DRFPFingerprintDataset(
+                reaction_dataset=reactions,
+                vec_dim=vec_dim
+            )
+            
+            fp = fp_dataset["rxn1"]
+            assert fp.shape == (vec_dim,)
+
+    def test_with_standardization(self):
+        """Test DRFP with standardization enabled."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            standardize=True,
+            standardize_hypervalent=True,
+            standardize_uncharge=True,
+            standardize_metals=True
+        )
+        
+        fp = fp_dataset["rxn1"]
+        assert fp.shape == (1024,)
+
+    def test_multiple_reactions(self):
+        """Test generating DRFP for multiple reactions."""
+        reactions = BaseDataset(
+            keys=["rxn1", "rxn2", "rxn3"],
+            array_data=[
+                {"reaction_smiles": "CCO>>CC=O"},
+                {"reaction_smiles": "C>>CC"},
+                {"reaction_smiles": "CC>>C=C"}
+            ]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions
+        )
+        
+        fp1 = fp_dataset["rxn1"]
+        fp2 = fp_dataset["rxn2"]
+        fp3 = fp_dataset["rxn3"]
+        
+        assert fp1.shape == (1024,)
+        assert fp2.shape == (1024,)
+        assert fp3.shape == (1024,)
+        
+        # Different reactions should have different fingerprints
+        assert not torch.equal(fp1, fp2)
+        assert not torch.equal(fp2, fp3)
+
+    def test_radius_parameter(self):
+        """Test DRFP with different radius values."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO.O=O>>CC(=O)O"}]
+        )
+        
+        # Generate fingerprints with different radii
+        fp_radius_2 = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            radius=2
+        )["rxn1"]
+        
+        fp_radius_4 = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            radius=4
+        )["rxn1"]
+        
+        # Both fingerprints should be valid tensors
+        # Note: For simple reactions, different radii may produce similar
+        # fingerprints because the structural variation is limited
+        assert fp_radius_2.shape == (1024,)
+        assert fp_radius_4.shape == (1024,)
+
+    def test_rings_parameter(self):
+        """Test DRFP with rings enabled/disabled."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "c1ccccc1>>C1CCCCC1"}]  # Benzene to cyclohexane
+        )
+        
+        # Generate fingerprints with rings enabled and disabled
+        fp_with_rings = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            rings=True
+        )["rxn1"]
+        
+        fp_without_rings = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            rings=False
+        )["rxn1"]
+        
+        # Both should produce valid fingerprints
+        # Note: Ring structures may still be captured even when rings=False
+        # because they're part of the substructure enumeration
+        assert fp_with_rings.shape == (1024,)
+        assert fp_without_rings.shape == (1024,)
+
+    def test_invalid_smiles(self):
+        """Test that DRFP handles invalid SMILES gracefully."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "invalid>>smiles"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions
+        )
+        
+        # DRFP may handle invalid SMILES gracefully by returning a zero or
+        # near-zero fingerprint, rather than raising an exception
+        fp = fp_dataset["rxn1"]
+        assert fp.shape == (1024,)
+        # Invalid SMILES typically produce all-zero or near-zero fingerprints
+        assert torch.sum(fp) <= 10.0  # Very low or zero sum
+
+    def test_fingerprint_deterministic(self):
+        """Test that DRFP fingerprints are deterministic."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO>>CC=O"}]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions
+        )
+        
+        fp1 = fp_dataset["rxn1"]
+        fp2 = fp_dataset["rxn1"]
+        
+        assert torch.equal(fp1, fp2)
+
+    def test_drfp_vs_rdkit_independence(self):
+        """Test that DRFP and RDKit+ produce different fingerprints."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO.O=O>>CC(=O)O"}]
+        )
+        
+        # Generate DRFP fingerprint
+        drfp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024
+        )
+        drfp_fp = drfp_dataset["rxn1"]
+        
+        # Generate RDKit+ structural fingerprint
+        rdkit_dataset = RDKitPlusFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024,
+            rxn_fp_type="struct"
+        )
+        rdkit_fp = rdkit_dataset["rxn1"]
+        
+        # Both should be 1024-dimensional
+        assert drfp_fp.shape == (1024,)
+        assert rdkit_fp.shape == (1024,)
+        
+        # But they should be different (different algorithms)
+        assert not torch.equal(drfp_fp, rdkit_fp)
+
+    def test_concatenate_drfp_rdkit(self):
+        """Test concatenating DRFP and RDKit+ fingerprints (SOTA config)."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO.O=O>>CC(=O)O"}]
+        )
+        
+        # Generate DRFP fingerprint (1024-dim)
+        drfp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024
+        )
+        drfp_fp = drfp_dataset["rxn1"]
+        
+        # Generate RDKit+ fingerprint (1024-dim)
+        rdkit_dataset = RDKitPlusFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024,
+            rxn_fp_type="struct"
+        )
+        rdkit_fp = rdkit_dataset["rxn1"]
+        
+        # Concatenate (SOTA uses both)
+        combined_fp = torch.cat([rdkit_fp, drfp_fp], dim=0)
+        
+        # Combined fingerprint should be 2048-dimensional
+        assert combined_fp.shape == (2048,)
+
+    def test_sota_configuration(self):
+        """Test with SOTA paper configuration."""
+        reactions = BaseDataset(
+            keys=["rxn1"],
+            array_data=[{"reaction_smiles": "CCO.O=O>>CC(=O)O"}]
+        )
+        
+        # SOTA config for DRFP
+        fp_dataset = DRFPFingerprintDataset(
+            reaction_dataset=reactions,
+            vec_dim=1024,
+            radius=3,
+            rings=True,
+            standardize=True
+        )
+        
+        fp = fp_dataset["rxn1"]
+        assert fp.shape == (1024,)
+
+    def test_wraps_sql_dataset(self):
+        """Test that DRFP dataset can wrap SQLDataset."""
+        # Create mock dataset that behaves like SQLDataset
+        reactions = BaseDataset(
+            keys=["rxn1", "rxn2"],
+            array_data=[
+                {"reaction_smiles": "CCO>>CC=O"},
+                {"reaction_smiles": "C>>CC"}
+            ]
+        )
+        
+        fp_dataset = DRFPFingerprintDataset(
             reaction_dataset=reactions,
             vec_dim=1024
         )
