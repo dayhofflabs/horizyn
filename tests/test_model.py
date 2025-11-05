@@ -459,7 +459,7 @@ class TestDualContrastiveModel:
         query_inputs = torch.randn(8, 100, device=device)
         target_inputs = torch.randn(8, 100, device=device)
 
-        with pytest.raises(ValueError, match="output dimension mismatch"):
+        with pytest.raises(ValueError, match="output shape mismatch"):
             model(query_inputs, target_inputs)
 
     def test_enforce_normalization(self):

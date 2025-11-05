@@ -2,14 +2,16 @@
 Unit tests for SQL and HDF5 dataset classes.
 """
 
+import sqlite3
+import tempfile
+from pathlib import Path
+
+import h5py
+import numpy as np
 import pytest
 import torch
-import sqlite3
-import h5py
-import tempfile
-import numpy as np
-from pathlib import Path
-from horizyn.datasets import SQLDataset, EmbedDataset
+
+from horizyn.datasets import EmbedDataset, SQLDataset
 
 
 class TestSQLDataset:
@@ -247,6 +249,61 @@ class TestSQLDataset:
         items = [dataset[key] for key in dataset.keys]
         assert len(items) == 3
 
+    def test_integer_indexing(self, sample_db):
+        """Test that dataset supports integer indexing."""
+        dataset = SQLDataset(
+            file_path=str(sample_db),
+            table_name="reactions",
+            search_key="reaction_id",
+            columns=["reaction_smiles"],
+            in_memory=True,
+        )
+
+        # Access by integer index
+        sample0 = dataset[0]
+        sample1 = dataset[1]
+        sample2 = dataset[2]
+
+        # Should return same data as accessing by key
+        assert sample0 == dataset[dataset.keys[0]]
+        assert sample1 == dataset[dataset.keys[1]]
+        assert sample2 == dataset[dataset.keys[2]]
+
+    def test_integer_indexing_out_of_bounds(self, sample_db):
+        """Test that out of bounds integer index raises IndexError."""
+        dataset = SQLDataset(
+            file_path=str(sample_db),
+            table_name="reactions",
+            search_key="reaction_id",
+            columns=["reaction_smiles"],
+            in_memory=True,
+        )
+
+        with pytest.raises(IndexError, match="out of bounds"):
+            dataset[10]
+
+        with pytest.raises(IndexError, match="out of bounds"):
+            dataset[-1]
+
+    def test_integer_indexing_dataloader_compatible(self, sample_db):
+        """Test that integer indexing makes dataset compatible with DataLoader."""
+        from torch.utils.data import DataLoader
+
+        dataset = SQLDataset(
+            file_path=str(sample_db),
+            table_name="reactions",
+            search_key="reaction_id",
+            columns=["reaction_smiles"],
+            in_memory=True,
+        )
+
+        # Should be able to create a DataLoader
+        loader = DataLoader(dataset, batch_size=2, shuffle=False)
+
+        # Should be able to iterate
+        batches = list(loader)
+        assert len(batches) == 2  # 3 items, batch size 2 -> 2 batches
+
 
 class TestEmbedDataset:
     """Tests for the EmbedDataset class."""
@@ -424,6 +481,58 @@ class TestEmbedDataset:
         assert "protein_001" in dataset.keys
         assert "protein_002" in dataset.keys
         assert dataset["protein_001"].shape == (512,)
+
+    def test_integer_indexing(self, sample_hdf5):
+        """Test that dataset supports integer indexing."""
+        h5_path, original_vectors = sample_hdf5
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
+        # Access by integer index
+        embed0 = dataset[0]
+        embed1 = dataset[1]
+        embed2 = dataset[2]
+
+        # Should return same data as accessing by key
+        assert torch.equal(embed0, dataset[dataset.keys[0]])
+        assert torch.equal(embed1, dataset[dataset.keys[1]])
+        assert torch.equal(embed2, dataset[dataset.keys[2]])
+
+        # Should match original vectors
+        assert torch.allclose(embed0, torch.from_numpy(original_vectors[0]), atol=1e-5)
+        assert torch.allclose(embed1, torch.from_numpy(original_vectors[1]), atol=1e-5)
+        assert torch.allclose(embed2, torch.from_numpy(original_vectors[2]), atol=1e-5)
+
+    def test_integer_indexing_out_of_bounds(self, sample_hdf5):
+        """Test that out of bounds integer index raises IndexError."""
+        h5_path, _ = sample_hdf5
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
+        with pytest.raises(IndexError, match="out of bounds"):
+            dataset[10]
+
+        with pytest.raises(IndexError, match="out of bounds"):
+            dataset[-1]
+
+    def test_integer_indexing_dataloader_compatible(self, sample_hdf5):
+        """Test that integer indexing makes dataset compatible with DataLoader."""
+        from torch.utils.data import DataLoader
+
+        h5_path, _ = sample_hdf5
+
+        dataset = EmbedDataset(file_path=str(h5_path), in_memory=True)
+
+        # Should be able to create a DataLoader
+        loader = DataLoader(dataset, batch_size=2, shuffle=False)
+
+        # Should be able to iterate
+        batches = list(loader)
+        assert len(batches) == 2  # 3 items, batch size 2 -> 2 batches
+
+        # Check batch structure
+        first_batch = batches[0]
+        assert first_batch.shape == (2, 512)  # batch_size x vec_dim
 
 
 class TestSQLAndHDF5Integration:

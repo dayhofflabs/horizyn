@@ -16,7 +16,6 @@ import pytest
 import torch
 import yaml
 
-
 # Pytest markers
 pytestmark = pytest.mark.integration
 
@@ -53,10 +52,10 @@ class TestSmokeNanodata:
 
         # Check data paths point to nanodata
         data_cfg = config["data"]
-        assert "nanodata" in data_cfg["reactions_db"]
-        assert "nanodata" in data_cfg["proteins_h5"]
-        assert "nanodata" in data_cfg["train_pairs_db"]
-        assert "nanodata" in data_cfg["val_pairs_db"]
+        assert "nanodata" in data_cfg["reactions_path"]
+        assert "nanodata" in data_cfg["proteins_path"]
+        assert "nanodata" in data_cfg["train_pairs_path"]
+        assert "nanodata" in data_cfg["val_pairs_path"]
 
     def test_nanodata_files_exist(self):
         """Test that all nanodata files are present."""
@@ -118,24 +117,26 @@ class TestSmokeNanodata:
 
         # Verify data loaded
         assert data_module.train_data is not None
-        assert data_module.val_retrieval_queries is not None
-        assert data_module.val_retrieval_targets is not None
+        assert data_module.val_retrieval_pairs is not None
+        # Targets are accessed via _target_data (not exposed as public property)
         assert data_module.val_retrieval_pairs is not None
 
         # Initialize model
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            scheduler_config=config.scheduler if hasattr(config, "scheduler") else None,
-            dedup_pairs=config.training.get("dedup_pairs", True),
-            log_retrieval_metrics=config.training.get("log_retrieval_metrics", True),
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         # Verify model structure
         assert model.model is not None
-        assert model.loss is not None
-        assert hasattr(model, "retrieval_metrics")
+        assert model.loss_fn is not None
+        assert hasattr(model, "metric_functionals")
 
         # Setup trainer
         trainer = pl.Trainer(
@@ -163,7 +164,8 @@ class TestSmokeNanodata:
         trainer.fit(model, data_module)
 
         # Verify training completed
-        assert trainer.current_epoch == config.training.max_epochs - 1
+        # After training, current_epoch is incremented one more time
+        assert trainer.current_epoch == config.training.max_epochs
 
         # Verify checkpoints were saved
         checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
@@ -207,10 +209,14 @@ class TestSmokeNanodata:
         pl.seed_everything(42)
         data_module = HorizynDataModule(**config.data)
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            dedup_pairs=True,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         trainer = pl.Trainer(
@@ -237,14 +243,19 @@ class TestSmokeNanodata:
 
         loaded_model = HorizynLitModule.load_from_checkpoint(
             checkpoint_path,
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         # Verify loaded model has correct structure
         assert loaded_model.model is not None
-        assert loaded_model.loss is not None
+        assert loaded_model.loss_fn is not None
 
         # Verify model parameters were loaded
         original_params = sum(p.numel() for p in model.parameters())
@@ -274,19 +285,20 @@ class TestSmokeNanodata:
         # Get first batch to verify data is accessible
         first_batch = next(iter(train_loader))
 
-        # Verify batch structure
-        assert "query" in first_batch
-        assert "target" in first_batch
-        assert "pair_id" in first_batch or "query_id" in first_batch
+        # Verify batch structure - keys are query_id, target_id, query_vec, target_vec
+        assert "query_id" in first_batch
+        assert "target_id" in first_batch
+        assert "query_vec" in first_batch
+        assert "target_vec" in first_batch
 
         # Verify tensors have correct shapes
-        query = first_batch["query"]
-        target = first_batch["target"]
+        query_vec = first_batch["query_vec"]
+        target_vec = first_batch["target_vec"]
 
-        assert isinstance(query, torch.Tensor)
-        assert isinstance(target, torch.Tensor)
-        assert query.dim() == 2  # (batch_size, features)
-        assert target.dim() == 2  # (batch_size, features)
+        assert isinstance(query_vec, torch.Tensor)
+        assert isinstance(target_vec, torch.Tensor)
+        assert query_vec.dim() == 2  # (batch_size, features)
+        assert target_vec.dim() == 2  # (batch_size, features)
 
     def test_validation_metrics_computed(self, tmp_path):
         """Test that validation metrics are computed correctly."""
@@ -305,10 +317,14 @@ class TestSmokeNanodata:
 
         data_module = HorizynDataModule(**config.data)
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            log_retrieval_metrics=True,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         log_dir = tmp_path / "logs"
@@ -364,7 +380,7 @@ class TestSmokeConfigAndErrors:
         config = load_config("configs/nano.yaml")
 
         # Override to point to non-existent files
-        config.data.reactions_db = "data/nonexistent/reactions.db"
+        config.data.reactions_path = "data/nonexistent/reactions.db"
 
         data_module = HorizynDataModule(**config.data)
 
@@ -397,9 +413,14 @@ class TestSmokeRobustness:
 
         data_module = HorizynDataModule(**config.data)
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         trainer = pl.Trainer(
@@ -415,7 +436,8 @@ class TestSmokeRobustness:
 
         # Should not crash
         trainer.fit(model, data_module)
-        assert trainer.current_epoch == 0  # Completed 1 epoch (0-indexed)
+        # After training max_epochs=1, current_epoch will be 1
+        assert trainer.current_epoch == 1
 
     def test_deterministic_training(self, tmp_path):
         """Test that training is deterministic with fixed seed."""
@@ -435,9 +457,14 @@ class TestSmokeRobustness:
 
             data_module = HorizynDataModule(**config.data)
             model = HorizynLitModule(
-                model_config=config.model,
-                optimizer_config=config.optimizer,
-                loss_config=config.loss,
+                query_encoder_dims=config.model.query_encoder_dims,
+                target_encoder_dims=config.model.target_encoder_dims,
+                embedding_dim=config.model.embedding_dim,
+                learning_rate=config.training.learning_rate,
+                weight_decay=config.training.weight_decay,
+                beta=config.training.loss.beta,
+                learn_beta=config.training.loss.get("learn_beta", False),
+                metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
             )
 
             trainer = pl.Trainer(
@@ -529,13 +556,13 @@ class TestE2ESwissProtTraining:
 
         # Verify paths point to swissprot
         data_cfg = config["data"]
-        assert "swissprot" in data_cfg["reactions_db"]
-        assert "swissprot" in data_cfg["proteins_h5"]
-        assert "swissprot" in data_cfg["train_pairs_db"]
-        assert "swissprot" in data_cfg["val_pairs_db"]
+        assert "swissprot" in data_cfg["reactions_path"]
+        assert "swissprot" in data_cfg["proteins_path"]
+        assert "swissprot" in data_cfg["train_pairs_path"]
+        assert "swissprot" in data_cfg["val_pairs_path"]
 
         # Verify all files exist
-        for key in ["reactions_db", "proteins_h5", "train_pairs_db", "val_pairs_db"]:
+        for key in ["reactions_path", "proteins_path", "train_pairs_path", "val_pairs_path"]:
             filepath = Path(data_cfg[key])
             assert filepath.exists(), f"Missing SwissProt file: {filepath}"
 
@@ -560,8 +587,8 @@ class TestE2ESwissProtTraining:
 
         # Verify data was loaded
         assert data_module.train_data is not None
-        assert data_module.val_retrieval_queries is not None
-        assert data_module.val_retrieval_targets is not None
+        assert data_module.val_retrieval_pairs is not None
+        # Targets are accessed via _target_data (not exposed as public property)
         assert data_module.val_retrieval_pairs is not None
 
         # Check expected dataset sizes (approximate)
@@ -629,12 +656,14 @@ class TestE2ESwissProtTraining:
 
         # Initialize model
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            scheduler_config=config.scheduler if hasattr(config, "scheduler") else None,
-            dedup_pairs=config.training.get("dedup_pairs", True),
-            log_retrieval_metrics=config.training.get("log_retrieval_metrics", True),
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         # Setup trainer
@@ -720,10 +749,14 @@ class TestE2ESwissProtTraining:
         pl.seed_everything(42)
         data_module = HorizynDataModule(**config.data)
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            dedup_pairs=True,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         trainer = pl.Trainer(
@@ -792,10 +825,14 @@ class TestE2ESwissProtTraining:
 
         data_module = HorizynDataModule(**config.data)
         model = HorizynLitModule(
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-            log_retrieval_metrics=True,
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.get("learn_beta", False),
+            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
         trainer = pl.Trainer(

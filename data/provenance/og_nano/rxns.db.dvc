@@ -1,0 +1,60 @@
+outs:
+  - md5: 9ca1c4749d2ccaca9a1b60152f777b7f
+    size: 12288
+    hash: md5
+    path: rxns.db
+
+meta:
+
+  size: 12.00 KB
+
+  date_created: '2024-07-12'
+
+  author: Josh & Daniel
+
+  description: |-
+    Reactions and SMILES strings in the smallest possible dataset for end-to-end testing.
+
+    Constraints:
+      - About 10 reaction-protein pairs, with 1 prot per reaction.
+      - At least 1 protein is used by multiple reactions.
+      - At least 1 protein in the pair file should NOT be in the embedding file.
+      - At least 1 protein in the embedding file should NOT be in the pair file.
+      - Same pattern between reactions table and pair file.
+
+    Count: 12 reactions
+
+    Schema:
+      table_name="reaction",
+      columns=[
+          ("rs_id", "INTEGER"),
+          ("reaction_id", "TEXT"),
+          ("reaction_smiles", "TEXT"),
+      ],
+      primary_key="rs_id",
+      indexes=[
+          ("idx_on_reaction_id", "reaction_id"),
+      ],
+
+  transformation_source_code:
+    - https://github.com/dayhofflabs/refinery/blob/73722de2c0155632f6975b2f6091f407f227cbc8/pipelines/nanodata/nanodata.ipynb
+
+  ancestors:
+    - name: pair_cluster_train.db
+      file_md5_hash: 75e238c97124361fd978664d1ef7e8e6
+      repo_url: https://github.com/dayhofflabs/warehouse
+      repo_path: data/elixir/processed/pair_cluster/pair_cluster_train.db
+      commit_hash: 9e815e6d725877c01ab660a89f10bad8133827e7
+      git_branch: main
+    - name: rhea_rxn_smiles.db
+      file_md5_hash: 168cb64ef90972d43738258681e4a634
+      repo_url: https://github.com/dayhofflabs/warehouse
+      repo_path: data/elixir/processed/rhea2uniprot/rhea_rxn_smiles.db
+      commit_hash: 9e815e6d725877c01ab660a89f10bad8133827e7
+      git_branch: main
+    - name: uniprot_in_rhea.h5
+      file_md5_hash: 71061b7dea192a8af59aa1d47db7a921
+      repo_url: https://github.com/dayhofflabs/warehouse
+      repo_path: data/elixir/processed/uniprot_in_rhea.h5
+      commit_hash: 9e815e6d725877c01ab660a89f10bad8133827e7
+      git_branch: main

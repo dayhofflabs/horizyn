@@ -246,6 +246,11 @@ class HorizynLitModule(pl.LightningModule):
             (self.num_targets, vec_dim), dtype=torch.float32, device=self.device
         )
 
+        # Create mapping from target IDs to lookup table indices
+        self.target_id_to_idx = {
+            target_id: idx for idx, target_id in enumerate(datamodule._target_data.keys)
+        }
+
     def _update_target_lookup_table(self, batch: Dict[str, Any], target_embeds: torch.Tensor):
         """
         Update the target lookup table with encoded target embeddings.
@@ -358,21 +363,36 @@ class HorizynLitModule(pl.LightningModule):
 
         return loss
 
-    def _validation_lookup_step(self, batch: Dict[str, Any], batch_idx: int):
+    def _validation_lookup_step(self, batch: torch.Tensor | Dict[str, Any], batch_idx: int):
         """
         Build target lookup table by encoding all target embeddings.
 
         Args:
-            batch: Batch dict containing target_vec and target_lookup_row_idx.
+            batch: Either a tensor (target vectors) or batch dict containing
+                   target_vec and target_lookup_row_idx.
             batch_idx: Index of the batch.
         """
-        target_vecs = batch["target_vec"]
+        # Handle both tensor and dict inputs
+        if isinstance(batch, torch.Tensor):
+            # Batch is just the target vectors from EmbedDataset
+            target_vecs = batch
+            # Compute row indices based on batch_idx and batch_size
+            batch_size = target_vecs.shape[0]
+            dataloader = self.trainer.val_dataloaders[1]
+            start_idx = batch_idx * dataloader.batch_size
+            row_indices = torch.arange(start_idx, start_idx + batch_size, dtype=torch.long)
+            # Create a dict for _update_target_lookup_table
+            batch_dict = {"target_lookup_row_idx": row_indices}
+        else:
+            # Batch is a dict (for backward compatibility with tests)
+            target_vecs = batch["target_vec"]
+            batch_dict = batch
 
         # Encode targets
         target_embeds = self.model.target_encoder(target_vecs)
 
         # Update lookup table
-        self._update_target_lookup_table(batch, target_embeds)
+        self._update_target_lookup_table(batch_dict, target_embeds)
 
         # Synchronize across DDP ranks
         self.trainer.strategy.barrier()
@@ -403,10 +423,22 @@ class HorizynLitModule(pl.LightningModule):
         for metric_name, metric_func in self.metric_functionals.items():
             metric_values = []
             for idx in range(batch_size):
-                # Get target indices for this query
-                target_idx = target_ids[idx]
-                if not isinstance(target_idx, torch.Tensor):
-                    target_idx = torch.tensor(target_idx, device=self.device)
+                # Get target ID and convert to lookup table index
+                target_id = target_ids[idx]
+
+                # Convert string ID to integer index in lookup table
+                if isinstance(target_id, str):
+                    target_idx = self.target_id_to_idx[target_id]
+                    target_idx = torch.tensor([target_idx], device=self.device)
+                elif isinstance(target_id, torch.Tensor):
+                    # If already a tensor, ensure it's 1D
+                    if target_id.dim() == 0:
+                        target_idx = target_id.unsqueeze(0)
+                    else:
+                        target_idx = target_id
+                else:
+                    # Assume it's already an integer index
+                    target_idx = torch.tensor([target_id], device=self.device)
 
                 # Compute metric
                 metric_value = metric_func(scores[idx], target_idx)

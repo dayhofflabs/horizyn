@@ -19,13 +19,14 @@ SQLite database containing reaction information with SMILES strings.
 
 **Schema:**
 ```sql
-CREATE TABLE rxns (
-    rxn_id TEXT PRIMARY KEY,
-    smiles TEXT NOT NULL
+CREATE TABLE reaction (
+    rs_id INTEGER PRIMARY KEY,
+    reaction_id TEXT,
+    reaction_smiles TEXT
 );
 ```
 
-**Usage:** Loaded by `SQLDataset` to retrieve reaction SMILES for fingerprint generation.
+**Usage:** Loaded by `SQLDataset` to retrieve reaction SMILES for fingerprint generation. The `reaction_id` column is used as the search key.
 
 ### 2. `proteins_t5_embeddings.h5`
 HDF5 file containing pre-computed protein embeddings from the ProtT5 model.
@@ -43,17 +44,27 @@ SQLite database containing training reaction-protein pairs.
 
 **Schema:**
 ```sql
-CREATE TABLE pairs (
-    pair_id INTEGER PRIMARY KEY,
-    query_id TEXT NOT NULL,    -- reaction_id
-    target_id TEXT NOT NULL     -- protein_id
+CREATE TABLE protein_to_reaction (
+    pr_id INTEGER PRIMARY KEY,
+    reaction_id TEXT,
+    protein_id TEXT
 );
 ```
 
-**Usage:** Loaded by `HorizynDataModule` to define positive training pairs.
+**Usage:** Loaded by `HorizynDataModule` to define positive training pairs. The `pr_id` column is used as the search key, and `reaction_id`/`protein_id` are mapped to `query_id`/`target_id` internally.
 
 ### 4. `val_pairs.db`
 SQLite database containing validation reaction-protein pairs (same schema as `train_pairs.db`).
+
+**Schema:**
+```sql
+CREATE TABLE protein_to_reaction (
+    pr_id INTEGER PRIMARY KEY,
+    reaction_id TEXT,
+    protein_id TEXT
+    -- Note: swissprot adds 'db_source TEXT' column
+);
+```
 
 **Usage:** Loaded by `HorizynDataModule` to evaluate model performance during training.
 

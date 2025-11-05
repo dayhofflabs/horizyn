@@ -19,41 +19,45 @@ def mock_data_files():
     tmpdir = tempfile.mkdtemp()
     tmpdir = Path(tmpdir)
 
-    # Create mock training pairs
+    # Create mock training pairs (using standardized schema)
     train_pairs_path = tmpdir / "train_pairs.db"
     conn = sqlite3.connect(train_pairs_path)
-    conn.execute("CREATE TABLE pairs (pair_id TEXT PRIMARY KEY, query_id TEXT, target_id TEXT)")
+    conn.execute(
+        "CREATE TABLE protein_to_reaction (pr_id INTEGER PRIMARY KEY, reaction_id TEXT, protein_id TEXT)"
+    )
     conn.executemany(
-        "INSERT INTO pairs VALUES (?, ?, ?)",
+        "INSERT INTO protein_to_reaction VALUES (?, ?, ?)",
         [
-            ("pair1", "rxn1", "prot1"),
-            ("pair2", "rxn2", "prot2"),
-            ("pair3", "rxn1", "prot2"),
+            (1, "rxn1", "prot1"),
+            (2, "rxn2", "prot2"),
+            (3, "rxn1", "prot2"),
         ],
     )
     conn.commit()
     conn.close()
 
-    # Create mock validation pairs
+    # Create mock validation pairs (using standardized schema)
     val_pairs_path = tmpdir / "val_pairs.db"
     conn = sqlite3.connect(val_pairs_path)
-    conn.execute("CREATE TABLE pairs (pair_id TEXT PRIMARY KEY, query_id TEXT, target_id TEXT)")
+    conn.execute(
+        "CREATE TABLE protein_to_reaction (pr_id INTEGER PRIMARY KEY, reaction_id TEXT, protein_id TEXT)"
+    )
     conn.executemany(
-        "INSERT INTO pairs VALUES (?, ?, ?)",
+        "INSERT INTO protein_to_reaction VALUES (?, ?, ?)",
         [
-            ("val_pair1", "rxn1", "prot1"),
-            ("val_pair2", "rxn2", "prot2"),
+            (1, "rxn1", "prot1"),
+            (2, "rxn2", "prot2"),
         ],
     )
     conn.commit()
     conn.close()
 
-    # Create mock reactions
+    # Create mock reactions (using standardized schema)
     reactions_path = tmpdir / "reactions.db"
     conn = sqlite3.connect(reactions_path)
-    conn.execute("CREATE TABLE reactions (reaction_id TEXT PRIMARY KEY, reaction_smiles TEXT)")
+    conn.execute("CREATE TABLE reaction (reaction_id TEXT PRIMARY KEY, reaction_smiles TEXT)")
     conn.executemany(
-        "INSERT INTO reactions VALUES (?, ?)",
+        "INSERT INTO reaction VALUES (?, ?)",
         [
             ("rxn1", "CCO>>CC=O"),
             ("rxn2", "C>>CC"),

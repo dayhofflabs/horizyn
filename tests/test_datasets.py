@@ -358,7 +358,10 @@ class TestTupleDataset:
         # Tuple dataset that doesn't return dicts
         pairs = BaseDataset(keys=["pair1"], array_data=torch.tensor([[1, 2]]))
 
-        tuple_ds = TupleDataset(tuple_dataset=pairs, key_name_to_dataset={"query": queries})
+        # With skip_missing=False, the error happens during __getitem__
+        tuple_ds = TupleDataset(
+            tuple_dataset=pairs, key_name_to_dataset={"query": queries}, skip_missing=False
+        )
 
         with pytest.raises(TypeError, match="must return a dict"):
             tuple_ds["pair1"]
@@ -371,10 +374,14 @@ class TestTupleDataset:
         # Tuple dataset missing "target" key
         pairs = BaseDataset(keys=["pair1"], array_data=[{"query": "q1"}])  # Missing "target"
 
+        # With skip_missing=False, dataset is created but error happens during access
         tuple_ds = TupleDataset(
-            tuple_dataset=pairs, key_name_to_dataset={"query": queries, "target": targets}
+            tuple_dataset=pairs,
+            key_name_to_dataset={"query": queries, "target": targets},
+            skip_missing=False,
         )
 
+        # Error occurs when trying to access the pair
         with pytest.raises(KeyError, match="not found in tuple_dict"):
             tuple_ds["pair1"]
 
@@ -414,7 +421,7 @@ class TestTupleDataset:
         assert "target_data" in sample
 
     def test_tuple_dataset_properties(self):
-        """Test that tuple dataset exposes tuple_dataset properties."""
+        """Test that tuple dataset exposes relevant properties."""
         queries = BaseDataset(keys=["q1"], array_data=torch.randn(1, 5))
         targets = BaseDataset(keys=["t1"], array_data=torch.randn(1, 5))
 
@@ -427,9 +434,127 @@ class TestTupleDataset:
             tuple_dataset=pairs, key_name_to_dataset={"query": queries, "target": targets}
         )
 
+        # Keys should match since all pairs are valid
         assert tuple_ds.keys == pairs.keys
+        
+        # array_data delegates to tuple_dataset
         assert tuple_ds.array_data == pairs.array_data
-        assert tuple_ds.key_to_idx == pairs.key_to_idx
+        
+        # key_to_idx is based on filtered keys (though in this case all are valid)
+        assert len(tuple_ds.key_to_idx) == len(pairs.keys)
+        assert all(key in tuple_ds.key_to_idx for key in pairs.keys)
+
+    def test_skip_missing_filters_invalid_pairs(self):
+        """Test that skip_missing=True filters out pairs with missing keys."""
+        # Source datasets
+        queries = BaseDataset(
+            keys=["q1", "q2", "q3"], array_data=torch.tensor([[1.0], [2.0], [3.0]])
+        )
+        targets = BaseDataset(
+            keys=["t1", "t2", "t3"], array_data=torch.tensor([[10.0], [20.0], [30.0]])
+        )
+
+        # Pairs with some invalid references
+        pairs = BaseDataset(
+            keys=["pair1", "pair2", "pair3", "pair4"],
+            array_data=[
+                {"query": "q1", "target": "t2"},  # valid
+                {"query": "q99", "target": "t1"},  # invalid: q99 doesn't exist
+                {"query": "q2", "target": "t99"},  # invalid: t99 doesn't exist
+                {"query": "q3", "target": "t3"},  # valid
+            ],
+        )
+
+        # With skip_missing=True (default), should filter out invalid pairs
+        tuple_ds = TupleDataset(
+            tuple_dataset=pairs, key_name_to_dataset={"query": queries, "target": targets}
+        )
+
+        # Should only have 2 valid pairs
+        assert len(tuple_ds) == 2
+        assert "pair1" in tuple_ds.keys
+        assert "pair4" in tuple_ds.keys
+        assert "pair2" not in tuple_ds.keys  # Filtered out
+        assert "pair3" not in tuple_ds.keys  # Filtered out
+
+        # Can access valid pairs
+        sample1 = tuple_ds["pair1"]
+        assert torch.equal(sample1["query"], torch.tensor([1.0]))
+        assert torch.equal(sample1["target"], torch.tensor([20.0]))
+
+    def test_skip_missing_false_strict_mode(self):
+        """Test that skip_missing=False keeps all pairs and raises errors on access."""
+        queries = BaseDataset(keys=["q1"], array_data=torch.tensor([[1.0]]))
+        targets = BaseDataset(keys=["t1"], array_data=torch.tensor([[10.0]]))
+
+        pairs = BaseDataset(
+            keys=["pair1", "pair2"],
+            array_data=[
+                {"query": "q1", "target": "t1"},  # valid
+                {"query": "q99", "target": "t1"},  # invalid
+            ],
+        )
+
+        # With skip_missing=False, all pairs are kept
+        tuple_ds = TupleDataset(
+            tuple_dataset=pairs,
+            key_name_to_dataset={"query": queries, "target": targets},
+            skip_missing=False,
+        )
+
+        # Should have all pairs
+        assert len(tuple_ds) == 2
+
+        # Valid pair works
+        sample1 = tuple_ds["pair1"]
+        assert torch.equal(sample1["query"], torch.tensor([1.0]))
+
+        # Invalid pair raises KeyError when accessed
+        with pytest.raises(KeyError, match="not found"):
+            tuple_ds["pair2"]
+
+    def test_skip_missing_with_all_valid_pairs(self):
+        """Test that skip_missing=True doesn't filter when all pairs are valid."""
+        queries = BaseDataset(keys=["q1", "q2"], array_data=torch.tensor([[1.0], [2.0]]))
+        targets = BaseDataset(keys=["t1", "t2"], array_data=torch.tensor([[10.0], [20.0]]))
+
+        pairs = BaseDataset(
+            keys=["pair1", "pair2"],
+            array_data=[{"query": "q1", "target": "t1"}, {"query": "q2", "target": "t2"}],
+        )
+
+        tuple_ds = TupleDataset(
+            tuple_dataset=pairs, key_name_to_dataset={"query": queries, "target": targets}
+        )
+
+        # All pairs should be present
+        assert len(tuple_ds) == 2
+        assert tuple_ds.keys == pairs.keys
+
+    def test_skip_missing_preserves_original_keys(self):
+        """Test that skip_missing preserves query_id/target_id in output."""
+        queries = BaseDataset(keys=["q1"], array_data=torch.tensor([[1.0]]))
+        targets = BaseDataset(keys=["t1"], array_data=torch.tensor([[10.0]]))
+
+        pairs = BaseDataset(
+            keys=["pair1"], array_data=[{"query_id": "q1", "target_id": "t1"}]
+        )
+
+        tuple_ds = TupleDataset(
+            tuple_dataset=pairs,
+            key_name_to_dataset={"query_id": queries, "target_id": targets},
+            rename_map={"query_id": "query_vec", "target_id": "target_vec"},
+        )
+
+        sample = tuple_ds["pair1"]
+
+        # Should have both original IDs and renamed vectors
+        assert "query_id" in sample
+        assert "target_id" in sample
+        assert "query_vec" in sample
+        assert "target_vec" in sample
+        assert sample["query_id"] == "q1"
+        assert sample["target_id"] == "t1"
 
 
 class TestDatasetEdgeCases:
