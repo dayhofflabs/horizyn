@@ -142,41 +142,45 @@ class HorizynDataModule(pl.LightningDataModule):
     def _augment_pairs_bidirectional(self, pairs: BaseDataset) -> BaseDataset:
         """
         Augment pairs with bidirectional reaction variants.
-        
+
         For each pair (reaction_id, protein_id):
         - Forward: (reaction_id_f, protein_id)
         - Backward: (reaction_id_r, protein_id)
-        
+
         Args:
             pairs: Dataset with query_id (reaction_id) and target_id (protein_id).
-            
+
         Returns:
             Augmented dataset with both forward and backward pairs.
         """
         augmented_keys = []
         augmented_data = []
-        
+
         for pair_key in pairs.keys:
             pair_data = pairs[pair_key]
             query_id = pair_data["query_id"]
             target_id = pair_data["target_id"]
-            
+
             # Forward direction
             augmented_keys.append(f"{pair_key}_f")
-            augmented_data.append({
-                "query_id": f"{query_id}_f",
-                "target_id": target_id,
-            })
-            
+            augmented_data.append(
+                {
+                    "query_id": f"{query_id}_f",
+                    "target_id": target_id,
+                }
+            )
+
             # Backward direction
             augmented_keys.append(f"{pair_key}_r")
-            augmented_data.append({
-                "query_id": f"{query_id}_r",
-                "target_id": target_id,
-            })
-        
+            augmented_data.append(
+                {
+                    "query_id": f"{query_id}_r",
+                    "target_id": target_id,
+                }
+            )
+
         return BaseDataset(keys=augmented_keys, array_data=augmented_data)
-    
+
     def _setup_training_data(self):
         """Setup training dataset with fingerprints and embeddings."""
         print("Setting up training data...")
@@ -192,7 +196,7 @@ class HorizynDataModule(pl.LightningDataModule):
         )
         original_pair_count = len(train_pairs)
         print(f"  Loaded {original_pair_count} training pairs")
-        
+
         # Augment pairs with bidirectional reactions (forward + backward)
         train_pairs = self._augment_pairs_bidirectional(train_pairs)
         print(f"  Augmented to {len(train_pairs)} bidirectional pairs")
@@ -235,7 +239,7 @@ class HorizynDataModule(pl.LightningDataModule):
         )
         original_val_pair_count = len(val_pairs)
         print(f"  Loaded {original_val_pair_count} validation pairs")
-        
+
         # Augment validation pairs with bidirectional reactions (forward + backward)
         val_pairs = self._augment_pairs_bidirectional(val_pairs)
         print(f"  Augmented to {len(val_pairs)} bidirectional pairs")
@@ -246,7 +250,7 @@ class HorizynDataModule(pl.LightningDataModule):
                 "Training data must be setup before validation data. "
                 "Query and target datasets are shared between train and validation."
             )
-        
+
         # Create full screening set: ALL proteins from train + val
         # This is critical for correct validation metrics
         train_pairs = SQLDataset(
@@ -257,28 +261,28 @@ class HorizynDataModule(pl.LightningDataModule):
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
             in_memory=True,
         )
-        
+
         # Collect all unique protein IDs from both train and val
         all_protein_ids = set()
         for pair_key in train_pairs.keys:
             all_protein_ids.add(train_pairs[pair_key]["target_id"])
         for pair_key in val_pairs.keys:
             all_protein_ids.add(val_pairs[pair_key]["target_id"])
-        
+
         # Load full protein embeddings (all proteins in the HDF5 file)
         # We need this to be the complete screening set
         full_protein_dataset = EmbedDataset(
             file_path=str(self.proteins_path),
             in_memory=True,
         )
-        
+
         # Store as screening target data (used for validation lookup table)
         self._screening_target_data = full_protein_dataset
-        
+
         train_protein_ids = set(train_pairs[k]["target_id"] for k in train_pairs.keys)
         val_protein_ids = set(val_pairs[k]["target_id"] for k in val_pairs.keys)
         screening_protein_ids = set(full_protein_dataset.keys)
-        
+
         print(f"  Training proteins: {len(train_protein_ids)}")
         print(f"  Validation proteins: {len(val_protein_ids)}")
         print(f"  Screening set (full): {len(screening_protein_ids)} proteins")
@@ -346,28 +350,28 @@ class HorizynDataModule(pl.LightningDataModule):
     def _augment_reactions_bidirectional(self, reactions: BaseDataset) -> BaseDataset:
         """
         Augment reactions with bidirectional variants (forward and reverse).
-        
+
         For each reaction with key 'rxn_id' and SMILES 'A>>B':
         - Forward: key='rxn_id_f', smiles='A>>B'
         - Backward: key='rxn_id_r', smiles='B>>A'
-        
+
         Args:
             reactions: Dataset with reaction_smiles.
-            
+
         Returns:
             Augmented dataset with both forward and backward reactions.
         """
         augmented_keys = []
         augmented_data = []
-        
+
         for rxn_id in reactions.keys:
             rxn_data = reactions[rxn_id]
             smiles = rxn_data["reaction_smiles"]
-            
+
             # Forward direction
             augmented_keys.append(f"{rxn_id}_f")
             augmented_data.append({"reaction_smiles": smiles})
-            
+
             # Backward direction (reverse reactants and products)
             if ">>" in smiles:
                 parts = smiles.split(">>")
@@ -381,13 +385,13 @@ class HorizynDataModule(pl.LightningDataModule):
             else:
                 # No '>>' separator - skip backward
                 print(f"Warning: No '>>' separator in reaction SMILES for {rxn_id}: {smiles}")
-        
+
         return BaseDataset(keys=augmented_keys, array_data=augmented_data)
-    
+
     def _create_query_dataset(self):
         """
         Create query dataset with RDKit+ and DRFP fingerprints.
-        
+
         Reactions are augmented bidirectionally (forward + backward) to double
         the training data and ensure reversible reactions are learned properly.
 
@@ -402,7 +406,7 @@ class HorizynDataModule(pl.LightningDataModule):
             columns=["reaction_smiles"],
             in_memory=True,
         )
-        
+
         # Augment with bidirectional reactions (forward + backward)
         reactions = self._augment_reactions_bidirectional(reactions)
         print(f"  Augmented to {len(reactions)} bidirectional reactions")

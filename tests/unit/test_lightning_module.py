@@ -469,8 +469,12 @@ class TestHorizynLitModule:
         # Extract Linear layers for query and target encoders
         import torch.nn as nn
 
-        query_linears = [l for l in lit_module.model.query_encoder.main_nn if isinstance(l, nn.Linear)]
-        target_linears = [l for l in lit_module.model.target_encoder.main_nn if isinstance(l, nn.Linear)]
+        query_linears = [
+            l for l in lit_module.model.query_encoder.main_nn if isinstance(l, nn.Linear)
+        ]
+        target_linears = [
+            l for l in lit_module.model.target_encoder.main_nn if isinstance(l, nn.Linear)
+        ]
 
         # Expect two Linear layers: input->4096 and 4096->512
         assert len(query_linears) == 2
