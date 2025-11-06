@@ -214,9 +214,14 @@ class TestHorizynLitModule:
         lit_module.target_lookup_table = torch.zeros(10, 64)
         lit_module.num_targets = 10
 
+        # Mock datamodule for batch size info
+        class MockDataModule:
+            train_batch_size = 16384
+
         # Mock trainer for world_size
         class MockTrainer:
             world_size = 1
+            datamodule = MockDataModule()
 
             class MockStrategy:
                 @staticmethod
@@ -251,8 +256,10 @@ class TestHorizynLitModule:
         assert torch.all(lit_module.target_lookup_table[1] == 0)
         assert torch.all(lit_module.target_lookup_table[7] == 0)
 
-    def test_validation_retrieval_step(self):
-        """Test retrieval metrics computation."""
+    def test_validation_retrieval_step_multilabel(self):
+        """Test retrieval metrics computation with multi-label queries."""
+        from unittest.mock import patch
+
         lit_module = HorizynLitModule(
             query_encoder_dims=[128, 256, 64],
             target_encoder_dims=[256, 256, 64],
@@ -260,24 +267,94 @@ class TestHorizynLitModule:
             metric_ks=[1, 5, 10],
         )
 
-        # Create target lookup table
+        # Create target lookup table (20 targets)
         lit_module.target_lookup_table = torch.randn(20, 64)
         lit_module.target_lookup_table = torch.nn.functional.normalize(
             lit_module.target_lookup_table, dim=1
         )
 
+        # Create target_id_to_idx mapping
+        lit_module.target_id_to_idx = {f"target_{i}": i for i in range(20)}
+
+        # Mock datamodule with validation retrieval targets
+        class MockDataModule:
+            def __init__(self):
+                # Each query has multiple valid targets
+                self._val_retrieval_targets = {
+                    "query_0": ["target_0", "target_3"],  # 2 valid targets
+                    "query_1": ["target_5"],  # 1 valid target
+                    "query_2": ["target_10", "target_11", "target_12"],  # 3 valid targets
+                    "query_3": ["target_19"],  # 1 valid target
+                }
+
+            def __getitem__(self, key):
+                return self._val_retrieval_targets[key]
+
+        class MockTrainer:
+            datamodule = MockDataModule()
+
+        lit_module.trainer = MockTrainer()
+
+        # Batch now contains query_id instead of target_id
         batch = {
             "query_vec": torch.randn(4, 128),
-            "target_id": [
-                torch.tensor([0, 3]),  # Query 0 should retrieve targets 0 and 3
-                torch.tensor([5]),  # Query 1 should retrieve target 5
-                torch.tensor([10, 11, 12]),  # Query 2 should retrieve targets 10-12
-                torch.tensor([19]),  # Query 3 should retrieve target 19
-            ],
+            "query_id": ["query_0", "query_1", "query_2", "query_3"],
         }
 
-        # Run retrieval step (no exceptions should be raised)
-        lit_module._validation_retrieval_step(batch, batch_idx=0)
+        # Mock the log function to prevent Lightning errors
+        with patch.object(lit_module, "log"):
+            # Run retrieval step (no exceptions should be raised)
+            # This should compute metrics for each query against all its valid targets
+            lit_module._validation_retrieval_step(batch, batch_idx=0)
+
+            # Verify log was called for each metric
+            assert lit_module.log.call_count > 0
+
+    def test_validation_retrieval_step_single_target(self):
+        """Test retrieval with single target per query."""
+        from unittest.mock import patch
+
+        lit_module = HorizynLitModule(
+            query_encoder_dims=[128, 256, 64],
+            target_encoder_dims=[256, 256, 64],
+            embedding_dim=64,
+            metric_ks=[1, 10],
+        )
+
+        # Setup
+        lit_module.target_lookup_table = torch.randn(10, 64)
+        lit_module.target_lookup_table = torch.nn.functional.normalize(
+            lit_module.target_lookup_table, dim=1
+        )
+
+        lit_module.target_id_to_idx = {f"t{i}": i for i in range(10)}
+
+        class MockDataModule:
+            _val_retrieval_targets = {
+                "q1": ["t0"],  # Single target
+                "q2": ["t5"],
+            }
+
+            def __getitem__(self, key):
+                return self._val_retrieval_targets[key]
+
+        class MockTrainer:
+            datamodule = MockDataModule()
+
+        lit_module.trainer = MockTrainer()
+
+        batch = {
+            "query_vec": torch.randn(2, 128),
+            "query_id": ["q1", "q2"],
+        }
+
+        # Mock the log function to prevent Lightning errors
+        with patch.object(lit_module, "log"):
+            # Should work with single targets too
+            lit_module._validation_retrieval_step(batch, batch_idx=0)
+
+            # Verify metrics were computed
+            assert lit_module.log.call_count > 0
 
     def test_sota_configuration(self):
         """Test SOTA model configuration."""

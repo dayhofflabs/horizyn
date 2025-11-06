@@ -204,9 +204,33 @@ class HorizynDataModule(pl.LightningDataModule):
             },
         )
 
-        # Store datasets for retrieval metrics
+        # Group pairs by query_id for multi-label retrieval metrics
+        # Each query (reaction) has multiple valid targets (proteins)
+        from collections import defaultdict
+        from horizyn.datasets.base import BaseDataset
+        
+        query_to_targets = defaultdict(list)
+        for pair_key in val_pairs.keys:
+            pair = val_pairs[pair_key]
+            query_id = pair["query_id"]
+            target_id = pair["target_id"]
+            query_to_targets[query_id].append(target_id)
+        
+        # Get unique query IDs (sorted for determinism)
+        unique_query_ids = sorted(query_to_targets.keys())
+        
+        # Create retrieval dataset: maps query_id -> list of target_ids
+        retrieval_array_data = [query_to_targets[qid] for qid in unique_query_ids]
+        
+        # Store query-to-targets mapping and create retrieval dataset
+        self._query_to_targets = query_to_targets
+        
+        # Create dataset for retrieval queries (unique queries only)
         self._val_query_data = TupleDataset(
-            tuple_dataset=val_pairs,
+            tuple_dataset=BaseDataset(
+                keys=unique_query_ids,
+                array_data=[{"query_id": qid} for qid in unique_query_ids],
+            ),
             key_name_to_dataset={
                 "query_id": self._query_data,
             },
@@ -214,8 +238,16 @@ class HorizynDataModule(pl.LightningDataModule):
                 "query_id": "query_vec",
             },
         )
+        
+        # Store target list dataset for metrics computation
+        self._val_retrieval_targets = BaseDataset(
+            keys=unique_query_ids,
+            array_data=retrieval_array_data,
+        )
 
         print(f"Validation dataset ready: {len(self._val_data)} samples")
+        print(f"  Unique validation queries: {len(unique_query_ids)}")
+        print(f"  Avg targets per query: {len(val_pairs) / len(unique_query_ids):.2f}")
 
     def _create_query_dataset(self):
         """

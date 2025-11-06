@@ -124,6 +124,71 @@ class TestHorizynDataModule:
         assert len(dm._train_data) == 3  # 3 training pairs
         assert len(dm._val_data) == 2  # 2 validation pairs
 
+        # NEW: Verify validation retrieval dataset (unique queries)
+        assert dm._val_query_data is not None
+        assert len(dm._val_query_data) == 2  # 2 unique queries (rxn1, rxn2)
+
+        # NEW: Verify retrieval targets dataset exists
+        assert dm._val_retrieval_targets is not None
+        assert len(dm._val_retrieval_targets) == 2  # One target list per unique query
+
+    def test_validation_query_grouping(self, mock_data_files):
+        """Test that validation pairs are correctly grouped by query."""
+        dm = HorizynDataModule(
+            train_pairs_path=mock_data_files["train_pairs"],
+            val_pairs_path=mock_data_files["val_pairs"],
+            reactions_path=mock_data_files["reactions"],
+            proteins_path=mock_data_files["proteins"],
+        )
+
+        dm.setup("fit")
+
+        # Check query dataset has unique queries
+        query_keys = dm._val_query_data.keys
+        assert len(query_keys) == 2
+        assert "rxn1" in query_keys
+        assert "rxn2" in query_keys
+
+        # Check target lists
+        rxn1_targets = dm._val_retrieval_targets["rxn1"]
+        rxn2_targets = dm._val_retrieval_targets["rxn2"]
+
+        # rxn1 has 1 validation pair (rxn1, prot1)
+        assert len(rxn1_targets) == 1
+        assert "prot1" in rxn1_targets
+
+        # rxn2 has 1 validation pair (rxn2, prot2)
+        assert len(rxn2_targets) == 1
+        assert "prot2" in rxn2_targets
+
+    def test_validation_batch_format(self, mock_data_files):
+        """Test that validation retrieval batches contain query_id."""
+        dm = HorizynDataModule(
+            train_pairs_path=mock_data_files["train_pairs"],
+            val_pairs_path=mock_data_files["val_pairs"],
+            reactions_path=mock_data_files["reactions"],
+            proteins_path=mock_data_files["proteins"],
+            retrieval_batch_size=1,
+        )
+
+        dm.setup("fit")
+        val_loaders = dm.val_dataloader()
+
+        # Get retrieval loader (index 2)
+        retrieval_loader = val_loaders[2]
+        batch = next(iter(retrieval_loader))
+
+        # Batch should contain query_id and query_vec
+        assert "query_id" in batch
+        assert "query_vec" in batch
+
+        # query_id should be a list of strings
+        assert isinstance(batch["query_id"], list)
+        assert isinstance(batch["query_id"][0], str)
+
+        # query_vec should be a tensor
+        assert isinstance(batch["query_vec"], torch.Tensor)
+
     def test_val_dataloader(self, mock_data_files):
         """Test validation dataloader creation."""
         dm = HorizynDataModule(
