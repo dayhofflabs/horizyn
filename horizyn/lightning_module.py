@@ -374,7 +374,7 @@ class HorizynLitModule(pl.LightningModule):
         """
         # Get datamodule for batch size info
         datamodule = self.trainer.datamodule
-        
+
         # Handle both tensor and dict inputs
         if isinstance(batch, torch.Tensor):
             # Batch is just the target vectors from EmbedDataset
@@ -436,23 +436,25 @@ class HorizynLitModule(pl.LightningModule):
             for idx in range(batch_size):
                 # Get query ID and its list of valid target IDs
                 query_id = query_ids[idx]
-                
+
                 # Get all valid target IDs for this query from the retrieval dataset
                 valid_target_ids = datamodule._val_retrieval_targets[query_id]
-                
+
                 # Convert target IDs to lookup table indices
                 target_indices = []
                 for target_id in valid_target_ids:
                     if target_id in self.target_id_to_idx:
                         target_indices.append(self.target_id_to_idx[target_id])
-                
+
                 # Create tensor of target indices (padded with -1 for metric functions)
                 if len(target_indices) == 0:
                     # No valid targets found - skip this query
                     continue
-                
-                target_idx_tensor = torch.tensor(target_indices, dtype=torch.long, device=self.device)
-                
+
+                target_idx_tensor = torch.tensor(
+                    target_indices, dtype=torch.long, device=self.device
+                )
+
                 # Compute metric (metrics handle multiple targets via torch.isin)
                 metric_value = metric_func(scores[idx], target_idx_tensor)
                 metric_values.append(metric_value)

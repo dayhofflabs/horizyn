@@ -353,4 +353,3 @@ class TestSmokeNanodata:
             # Note: exact metric names depend on implementation
             # Just verify that we have some validation output
             assert "epoch" in content
-

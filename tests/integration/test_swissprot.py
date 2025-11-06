@@ -1,19 +1,11 @@
 """
 Integration tests using the full SwissProt dataset.
 
-These tests verify data integrity and training with the production dataset.
-They are split into fast and slow tests:
+These tests verify data integrity with the production dataset without expensive
+operations like fingerprint computation or full training runs. All tests complete
+in < 5 seconds and are included in default test runs.
 
-- Fast tests: Data validation without expensive operations (< 5 seconds)
-- Slow tests: Full training runs (5-15 minutes), marked with @pytest.mark.slow
-
-Run fast tests (default):
-    pytest tests/integration/test_swissprot.py -v -m "not slow"
-
-Run slow tests:
-    pytest tests/integration/test_swissprot.py -v -m slow
-
-Run all tests:
+Run tests:
     pytest tests/integration/test_swissprot.py -v
 """
 
@@ -21,7 +13,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 
 pytestmark = pytest.mark.integration
 
@@ -48,7 +39,7 @@ def check_swissprot_data():
 
 class TestSwissProtFast:
     """
-    Fast tests using full SwissProt dataset.
+    Tests using full SwissProt dataset.
 
     These tests verify data integrity and basic loading without expensive
     operations like fingerprint computation or training. They run in < 5 seconds
@@ -188,4 +179,3 @@ class TestSwissProtFast:
             # Check embedding dimensions
             embed_shape = f["vectors"].shape
             assert embed_shape[1] == 1024, f"Expected 1024-dim embeddings, got {embed_shape[1]}"
-

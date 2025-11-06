@@ -208,23 +208,23 @@ class HorizynDataModule(pl.LightningDataModule):
         # Each query (reaction) has multiple valid targets (proteins)
         from collections import defaultdict
         from horizyn.datasets.base import BaseDataset
-        
+
         query_to_targets = defaultdict(list)
         for pair_key in val_pairs.keys:
             pair = val_pairs[pair_key]
             query_id = pair["query_id"]
             target_id = pair["target_id"]
             query_to_targets[query_id].append(target_id)
-        
+
         # Get unique query IDs (sorted for determinism)
         unique_query_ids = sorted(query_to_targets.keys())
-        
+
         # Create retrieval dataset: maps query_id -> list of target_ids
         retrieval_array_data = [query_to_targets[qid] for qid in unique_query_ids]
-        
+
         # Store query-to-targets mapping and create retrieval dataset
         self._query_to_targets = query_to_targets
-        
+
         # Create dataset for retrieval queries (unique queries only)
         self._val_query_data = TupleDataset(
             tuple_dataset=BaseDataset(
@@ -238,7 +238,7 @@ class HorizynDataModule(pl.LightningDataModule):
                 "query_id": "query_vec",
             },
         )
-        
+
         # Store target list dataset for metrics computation
         self._val_retrieval_targets = BaseDataset(
             keys=unique_query_ids,

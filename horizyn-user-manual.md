@@ -226,17 +226,23 @@ Track the distribution of scores for positive and negative pairs:
 
 **Validation Process**:
 
-The validation loop uses three dataloaders:
+The validation loop uses three dataloaders for multi-label retrieval:
 
 1. **Loss Dataloader**: Computes validation loss on held-out pairs
 2. **Lookup Table Dataloader**: Loads all target embeddings
-3. **Retrieval Dataloader**: Queries against the lookup table
+3. **Retrieval Dataloader**: Queries against the lookup table (unique queries only)
 
-For each query:
+**Multi-Label Retrieval**: Each reaction (query) can be catalyzed by multiple proteins (targets). For example, SwissProt has 36,433 validation pairs representing 1,147 unique reactions with an average of 32 valid proteins per reaction.
+
+For each unique query:
+- Retrieve the list of ALL valid target IDs for this query
 - Compute distances to all targets in the lookup table
-- Rank targets by distance
+- Rank targets by distance (ascending)
+- Check if ANY of the valid targets appear in top-K
 - Compute Top-K hit rates (K = 1, 10, 100, 1000)
 - Compute MRR, positive scores, negative scores
+
+This is fundamentally different from single-label retrieval where each query has exactly one correct answer.
 
 ---
 
@@ -262,8 +268,11 @@ When `setup("fit")` is called:
    - Merge fingerprints with protein embeddings based on pairs
    - All data loaded into memory (~15GB for SwissProt)
 
-4. **Repeat for Validation Data**:
-   - Separate validation pairs for retrieval metrics
+4. **Setup Validation Data**:
+   - Load validation pairs from SQLite
+   - Group pairs by query_id (reaction) for multi-label retrieval
+   - Create unique query dataset (one entry per reaction, not per pair)
+   - Store mapping from each query to its list of valid target IDs
    - Reuse reaction fingerprints and protein embeddings (no recomputation)
 
 #### Key Design: Memory vs Speed Tradeoff
@@ -494,21 +503,27 @@ Builds a complete lookup table of all target embeddings:
 lookup_table = {target_id: embedding for all targets}
 ```
 
-**Dataloader 2: Retrieval Metrics**
+**Dataloader 2: Retrieval Metrics (Multi-Label)**
 
-For each query:
-1. Compute distances to all targets in lookup table
-2. Rank targets by distance (ascending)
-3. Compute Top-K hit rates, MRR, score distributions
+The retrieval dataloader iterates over **unique queries only** (not all pairs).
+
+For each query batch:
+1. Look up the list of valid target IDs for this query (from `_val_retrieval_targets`)
+2. Compute distances from query embeddings to all targets in lookup table
+3. Rank targets by distance (ascending)
+4. Check if ANY of the valid targets appear in top-K
+5. Compute Top-K hit rates, MRR, score distributions
+
+**Example**: If query "rxn_123" has 3 valid proteins ["prot_A", "prot_B", "prot_C"], the top-1 metric checks if ANY of these 3 proteins ranks #1 out of all 34,187 proteins.
 
 **Why Three Dataloaders?**
 
 This design separates three distinct validation tasks:
-1. Measure generalization (validation loss)
-2. Prepare retrieval infrastructure (lookup table)
-3. Evaluate retrieval performance (metrics)
+1. **Loss computation** - Uses pairs (36,433 pairs) to measure generalization
+2. **Lookup table** - Loads all target embeddings once for efficiency
+3. **Retrieval metrics** - Uses unique queries (1,147 queries) for multi-label evaluation
 
-Each has different batching requirements and data access patterns.
+Each has different batching requirements and data access patterns. The retrieval dataloader groups pairs by query to correctly handle the many-to-many relationship between reactions and proteins.
 
 #### Optimizer Configuration
 
@@ -863,7 +878,14 @@ python train.py --config configs/nano.yaml --training.max_epochs 2
 
 **Skip Missing Pairs**: `TupleDataset` filters out pairs referencing non-existent keys by default with warnings. This allows training to proceed when reactions or proteins are filtered from the dataset for quality reasons.
 
-**Three Validation Dataloaders**: Validation uses three separate dataloaders for distinct tasks: computing loss on held-out pairs, building a lookup table of all target embeddings, and evaluating retrieval metrics. Each has different data formats and batching requirements.
+**Multi-Label Retrieval**: Validation pairs are grouped by query_id before metrics computation. This correctly handles the many-to-many relationship where each reaction can be catalyzed by multiple proteins. Metrics check if ANY valid target appears in top-K, not just one specific target. This is critical for accurate evaluation.
+
+**Three Validation Dataloaders**: Validation uses three separate dataloaders for distinct tasks:
+1. Computing loss on all pairs (36,433 pairs in SwissProt)
+2. Building a lookup table of all target embeddings (34,187 proteins)
+3. Evaluating retrieval metrics on unique queries (1,147 reactions)
+
+Each has different data formats and batching requirements. The retrieval dataloader uses unique queries with associated target lists to support multi-label evaluation.
 
 **Memory-First Design**: All data loads into memory and fingerprints compute once at initialization. This eliminates I/O bottlenecks for maximum training speed at the cost of requiring ~15GB RAM. The large batch size (16384) benefits from memory-resident data enabling fast random access during shuffling.
 
@@ -918,58 +940,66 @@ python train.py --config configs/sota.yaml \
 After confirming training works, run automated tests for verification:
 
 ```bash
-# Run all fast tests (unit + smoke + SwissProt fast, ~1 minute)
-pytest -m "not slow"
+# Run all tests (unit + integration, ~1 minute)
+pytest
 ```
 
-This runs 20 tests including:
-- All unit tests (datasets, models, losses, metrics)
-- Smoke tests with nanodata (full training pipeline)
-- SwissProt fast tests (data validation without fingerprints)
+This runs 420 tests including:
+- 398 unit tests (datasets, models, losses, metrics, config, etc.)
+- 22 integration tests (smoke tests with nanodata + SwissProt data validation)
 
-#### 3. Final Validation: Run Slow Tests (Optional)
+#### 3. Final Validation: Run SwissProt Tests (Optional)
 
-Only run slow tests when you're confident everything works:
+Only run SwissProt tests when you need to validate with production data:
 
 ```bash
-# Run slow SwissProt tests (30+ minutes total)
-pytest -m slow
+# Download SwissProt data first
+python scripts/download_data.py
+
+# Run SwissProt validation tests (< 5 seconds)
+pytest tests/integration/test_swissprot.py -v
 ```
 
 These tests verify:
-- Full data loading with fingerprint computation (5-10 min)
-- Complete training for 2 epochs (10-15 min)
-- Validation metrics with full dataset (5-10 min)
+- Config points to correct SwissProt files
+- All data files exist and are not empty
+- Database schemas match expected structure
+- Dataset sizes are in expected ranges
 
-**When to run slow tests**:
-- Before committing major changes
-- Before creating pull requests
-- In CI/CD pipelines (automated)
-- Not during active development (too slow for iteration)
+**When to run SwissProt tests**:
+- After downloading or updating SwissProt data
+- Before full SOTA training runs
+- When debugging data-related issues
 
 #### 4. See Test Output in Real-Time
 
-If you must run tests but want to see progress, use `-s` to disable output capture:
+If you want to see progress during integration tests, use `-s` to disable output capture:
 
 ```bash
-pytest tests/test_integration.py::TestSwissProtSlow::test_swissprot_full_training_two_epochs -v -s
+pytest tests/integration/test_smoke_nanodata.py::TestSmokeNanodata::test_smoke_training_pipeline -v -s
 ```
 
 This shows Lightning's progress bars and training output during the test.
 
 ### Test Organization
 
-The test suite has three tiers:
+The test suite is organized into unit tests and integration tests:
 
-**Unit Tests** (< 1 minute total): Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints). Provides 95% code coverage across all modules.
+**Unit Tests** (`tests/unit/`, 398 tests, < 1 minute total): Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints, config, etc.). Provides 95% code coverage across all modules.
 
-**Smoke Tests** (< 10 seconds): Quick integration tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SwissProt data. Found in `test_integration.py`.
+**Integration Tests** (`tests/integration/`, 22 tests, < 30 seconds total): End-to-end tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SwissProt data:
+- Config and error handling (`test_smoke_config.py`)
+- Core pipeline (`test_smoke_nanodata.py`)
+- Training dynamics (`test_smoke_training.py`)
+- Validation metrics and multi-label retrieval (`test_smoke_validation.py`)
+- Edge cases and robustness (`test_smoke_robustness.py`)
+- SwissProt data validation (`test_swissprot.py`)
 
-**Slow Tests** (30+ minutes total): Full integration tests using complete SwissProt data (~930 MB). Marked with `@pytest.mark.slow` and excluded by default. Tests realistic memory usage, fingerprint computation, and full training runs.
+All tests run by default. SwissProt tests verify data integrity (schemas, sizes) without expensive operations like fingerprint computation or training.
 
 ### Running Tests
 
-Run all fast tests (default, excludes slow tests):
+Run all tests (unit + integration):
 ```bash
 pytest
 ```
@@ -979,34 +1009,33 @@ Run with coverage report:
 pytest --cov=horizyn --cov-report=html
 ```
 
-Run only slow tests (requires SwissProt data):
+Run only unit tests:
 ```bash
-# Download data first
-python scripts/download_data.py
-
-# Run slow tests
-pytest -m slow
+pytest tests/unit/ -v
 ```
 
-Run all tests including slow ones:
+Run only integration tests:
 ```bash
-pytest -v
-# Then manually run: pytest -m slow
+pytest tests/integration/ -v
 ```
 
 Run specific test file:
 ```bash
-pytest tests/test_model.py -v
+pytest tests/unit/test_model.py -v
 ```
 
 Run specific test:
 ```bash
-pytest tests/test_model.py::TestMLP::test_forward -v
+pytest tests/unit/test_model.py::TestMLP::test_forward -v
 ```
 
-Run SwissProt fast tests (no slow tests):
+Run SwissProt data validation tests (requires SwissProt data):
 ```bash
-pytest tests/test_integration.py::TestSwissProtFast -v
+# Download data first
+python scripts/download_data.py
+
+# Run SwissProt tests
+pytest tests/integration/test_swissprot.py -v
 ```
 
 ### Quick Smoke Test
@@ -1015,7 +1044,7 @@ Test the full training pipeline without downloading SwissProt:
 
 ```bash
 # Using pytest (fastest, ~10 seconds)
-pytest tests/test_integration.py::TestSmokeNanodata -v
+pytest tests/integration/test_smoke_nanodata.py -v
 
 # Or run training directly with nanodata (~30 seconds)
 python train.py --config configs/nano.yaml \
@@ -1024,6 +1053,20 @@ python train.py --config configs/nano.yaml \
 ```
 
 The nanodata files are included in the repository at `data/nanodata/`.
+
+### Testing Validation Metrics
+
+The validation metrics implementation includes specific tests for multi-label retrieval:
+
+```bash
+# Test that pairs are grouped by query for multi-label retrieval
+pytest tests/integration/test_smoke_validation.py::TestSmokeValidationMetrics::test_validation_query_grouping -v
+
+# Test that metrics are computed correctly (not impossibly low)
+pytest tests/integration/test_smoke_validation.py::TestSmokeValidationMetrics::test_validation_metrics_not_impossibly_low -v
+```
+
+These tests verify that the validation pipeline correctly handles the many-to-many relationship between reactions and proteins, ensuring metrics check if ANY valid target appears in top-K (not just one specific target).
 
 ### Code Quality
 

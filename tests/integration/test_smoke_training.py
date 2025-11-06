@@ -291,4 +291,3 @@ class TestSmokeTrainingDynamics:
 
         assert query_encoder_has_grads, "No gradients flowing to query encoder"
         assert target_encoder_has_grads, "No gradients flowing to target encoder"
-

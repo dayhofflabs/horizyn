@@ -43,4 +43,3 @@ class TestSmokeConfigAndErrors:
         # Error message should mention the missing file
         error_msg = str(exc_info.value)
         assert "nonexistent" in error_msg or "not found" in error_msg.lower()
-
