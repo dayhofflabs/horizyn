@@ -52,7 +52,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
-    "slow: Slow tests (5+ minutes, deselected by default)",
     "integration: Integration tests",
 ]
 addopts = [
@@ -60,7 +59,6 @@ addopts = [
     "--strict-markers",
     "--cov=horizyn",
     "--cov-report=term-missing",
-    "-m", "not slow",  # Skip slow tests by default
 ]
 
 [tool.black]
