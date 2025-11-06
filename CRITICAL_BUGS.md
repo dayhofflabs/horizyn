@@ -1,13 +1,20 @@
-# Critical Validation Bugs - Part 2
+# Critical Training & Validation Bugs
 
 ## Summary
 
-Two additional critical bugs found after fixing the per-pair vs per-query metrics bug:
+Three critical bugs found that explain why metrics are ~1% instead of the expected 30-40%:
 
 1. **Bidirectional Reactions**: Missing reaction direction augmentation (forward + backward)
+   - Impact: Training on only 50% of available examples
+   
 2. **Incomplete Screening Set**: Lookup table only contains training proteins, missing ~23K validation-only proteins
+   - Impact: 68% of validation queries have 0% hit rate (their targets aren't in the lookup table)
+   
+3. **Wrong Fingerprint Radius**: Training code uses `radius=2` instead of `radius=3` (API is correct)
+   - Impact: Models trained with horizyn are incompatible with the API
+   - Source: Horizyn distilled from hatchery but got this parameter wrong
 
-Both bugs make the reported metrics artificially low and incomparable to hatchery results.
+All three bugs must be fixed together before retraining. The combination explains the severe metric degradation.
 
 ---
 
@@ -182,10 +189,144 @@ These are data pipeline bugs, not model issues. The model has been training on i
 
 ## Files to Modify
 
+### Bug 1 & 2: Bidirectional Reactions + Screening Set
 1. `horizyn/data_module.py` - Add reaction direction augmentation and full screening set
 2. `horizyn/lightning_module.py` - Update lookup table to use full screening set
 3. Add tests to verify:
    - Reactions are doubled (forward + backward)
    - Screening set contains all train+val proteins
    - Validation queries can retrieve their targets
+
+### Bug 3: Morgan Fingerprint Radius
+1. `horizyn/horizyn/datasets/fingerprints/rdkit_plus.py` - Change `radius=2` to `radius=3` (line 150)
+2. `horizyn/tests/unit/test_fingerprints.py` - **Reviewed: No changes needed** (tests only check shapes/properties, not specific values)
+3. `horizyn/tests/unit/test_datasets.py` - Check for any fingerprint value assertions
+4. `horizyn/tests/integration/test_smoke_*.py` - Check for any fingerprint validation
+5. Add cross-validation test: Generate same SMILES in horizyn and API, verify identical fingerprints
+
+---
+
+## Bug 3: Training Code Uses Wrong Morgan Fingerprint Radius
+
+### The Issue
+
+The **Horizyn training code uses `radius=2`** for Morgan fingerprints, but the **API (which is based on the original hatchery codebase) correctly uses `radius=3`**. Since the horizyn repo is a distillation of the older codebase, it inherited the wrong parameter.
+
+### Current State
+
+**Training Code** (`horizyn/horizyn/datasets/fingerprints/rdkit_plus.py` line 150):
+```python
+# Morgan fingerprints with radius=2 (ECFP4) ❌ WRONG
+self._fp_gen = generator_func(
+    radius=2,  # Should be 3!
+    fpSize=self.fp_size,
+    includeChirality=self.use_chirality,
+)
+```
+
+**API Code** (`horizyn-api/src/horizyn/fingerprints/horizyn1.py` line 31-39):
+```python
+MORGAN_CONFIG = MorganFingerprintConfig(
+    fp_size=512,
+    radius=3,  # ✅ CORRECT (from original hatchery)
+    count_simulation=False,
+    include_chirality=True,
+    ...
+)
+```
+
+### Impact
+
+Morgan fingerprint radius determines the size of the atom neighborhood considered when generating fingerprints:
+- **radius=2** captures atoms up to 2 bonds away (ECFP4 / circular diameter 4)
+- **radius=3** captures atoms up to 3 bonds away (ECFP6 / circular diameter 6)
+
+**These produce completely different fingerprints**, meaning:
+1. The training code generates fingerprints that don't match the original model
+2. Any model trained with the current horizyn code will be incompatible with the API
+3. The existing checkpoint (`isp7e77b`) was trained with radius=3 (from hatchery)
+4. Retrieval quality will be severely degraded with wrong fingerprints
+
+### Evidence
+
+**Training configuration (WRONG):**
+- File: `horizyn/horizyn/datasets/fingerprints/rdkit_plus.py`
+- Line 150: `radius=2` (hardcoded, incorrect)
+- Used for all current horizyn training runs
+
+**API configuration (CORRECT):**
+- File: `horizyn-api/src/horizyn/fingerprints/horizyn1.py`
+- Line 33: `radius=3` in `MORGAN_CONFIG`
+- Based on original hatchery codebase (source of truth)
+
+**Hatchery original (CORRECT):**
+- File: `hatchery/src/datasets/fingerprint_data.py` line 646
+- Class: `RDKitplusFingerprintDataset`
+- Default parameter: `radius: int = 3`
+- All hatchery configs (health_check.yaml, paper configs, etc.) use this default
+- The existing checkpoint `isp7e77b` was trained with radius=3 from hatchery
+- Horizyn was distilled from hatchery but incorrectly hardcoded radius=2
+
+**Other settings match:**
+- Standardization: Both use `hypervalent=True, remove_hs=True, kekulize=False, uncharge=True, metals=True`
+- DRFP: Both use `radius=3, rings=True, vec_dim=1024`
+- Fingerprint type: Both use Morgan ("struct" mode for training, equivalent in API)
+- Chirality: Both use `include_chirality=True`
+
+### Fix Required
+
+**1. Update training code to match API (hatchery source):**
+
+```python
+# horizyn/horizyn/datasets/fingerprints/rdkit_plus.py line 149-153
+if self.mol_fp_type == "morgan":
+    # Morgan fingerprints (ECFP-like)
+    self._fp_gen = generator_func(
+        radius=3,  # ✅ Changed from 2 to match hatchery/API
+        fpSize=self.fp_size,
+        includeChirality=self.use_chirality,
+    )
+```
+
+**2. Update unit tests that may hardcode radius=2 expectations:**
+
+Files to check:
+- `horizyn/tests/unit/test_fingerprints.py` - May have tests expecting radius=2 fingerprints
+- `horizyn/tests/unit/test_datasets.py` - May test RDKitPlusFingerprintDataset with radius=2
+- `horizyn/tests/integration/test_smoke_*.py` - Integration tests may validate fingerprint outputs
+
+Search for:
+- Tests that validate specific fingerprint values
+- Tests that compare fingerprint outputs against expected values
+- Mock or fixture fingerprints that assume radius=2
+
+**3. Verification steps:**
+
+After fixing:
+1. Run all unit tests and update any that fail due to changed fingerprints
+2. Generate fingerprints from same SMILES in both training code and API
+3. Verify they produce identical outputs
+4. Re-train model from scratch with corrected fingerprints
+5. Verify model checkpoint is compatible with API
+
+### Validation
+
+After fixing, verify:
+1. Training code generates identical fingerprints to API for same SMILES
+2. Unit tests pass with updated fingerprint expectations
+3. Model trained with fixed code is compatible with API
+4. Retrieval metrics improve to expected levels (30-40% top-1) after fixing all three bugs
+
+---
+
+## Priority
+
+**CRITICAL - All three bugs must be fixed together**
+
+These bugs interact:
+1. **Bug 1 (Bidirectional)**: Missing 50% of training examples
+2. **Bug 2 (Screening set)**: Missing 68% of validation targets
+3. **Bug 3 (Fingerprints)**: API produces wrong fingerprints for the trained model
+
+The combination explains why reported metrics are ~1% instead of the expected 30-40%.
 
