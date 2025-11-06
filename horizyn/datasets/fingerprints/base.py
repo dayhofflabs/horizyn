@@ -51,6 +51,8 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         smiles_label: str = "reaction_smiles",
         standardize: bool = False,
         standardize_hypervalent: bool = True,
+        standardize_remove_hs: bool = True,
+        standardize_kekulize: bool = False,
         standardize_uncharge: bool = False,
         standardize_metals: bool = True,
         transforms: Optional[Callable[[K, Any], Any]] = None,
@@ -70,6 +72,10 @@ class BaseFingerprintDataset(WrapperDataset[K]):
                 Defaults to False.
             standardize_hypervalent: Standardize double bonds in hypervalent
                 compounds. Only used if standardize=True. Defaults to True.
+            standardize_remove_hs: Remove explicit hydrogen atoms. Only used if
+                standardize=True. Defaults to True.
+            standardize_kekulize: Kekulize aromatic compounds. Only used if
+                standardize=True. Defaults to False.
             standardize_uncharge: Convert to neutral species by protonation/
                 deprotonation. Only used if standardize=True. Defaults to False.
             standardize_metals: Disconnect bonds between metals and N, O, F atoms.
@@ -93,6 +99,8 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         if self.standardize:
             self._standardizer = Standardizer(
                 standardize_hypervalent=standardize_hypervalent,
+                standardize_remove_hs=standardize_remove_hs,
+                standardize_kekulize=standardize_kekulize,
                 standardize_uncharge=standardize_uncharge,
                 standardize_metals=standardize_metals,
             )

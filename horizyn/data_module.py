@@ -52,6 +52,8 @@ class HorizynDataModule(pl.LightningDataModule):
         standardize: Whether to standardize SMILES. Defaults to True.
         standardize_reactions: Whether to standardize reactions. Defaults to True.
         standardize_hypervalent: Whether to standardize hypervalent atoms. Defaults to True.
+        standardize_remove_hs: Whether to remove explicit hydrogen atoms. Defaults to True.
+        standardize_kekulize: Whether to kekulize aromatic compounds. Defaults to False.
         standardize_uncharge: Whether to uncharge molecules. Defaults to True.
         standardize_metals: Whether to standardize metals. Defaults to True.
 
@@ -82,6 +84,8 @@ class HorizynDataModule(pl.LightningDataModule):
         standardize: bool = True,
         standardize_reactions: bool = True,
         standardize_hypervalent: bool = True,
+        standardize_remove_hs: bool = True,
+        standardize_kekulize: bool = False,
         standardize_uncharge: bool = True,
         standardize_metals: bool = True,
     ):
@@ -108,6 +112,8 @@ class HorizynDataModule(pl.LightningDataModule):
         self.standardize = standardize
         self.standardize_reactions = standardize_reactions
         self.standardize_hypervalent = standardize_hypervalent
+        self.standardize_remove_hs = standardize_remove_hs
+        self.standardize_kekulize = standardize_kekulize
         self.standardize_uncharge = standardize_uncharge
         self.standardize_metals = standardize_metals
 
@@ -410,6 +416,8 @@ class HorizynDataModule(pl.LightningDataModule):
             use_chirality=True,
             standardize=self.standardize_reactions,
             standardize_hypervalent=self.standardize_hypervalent,
+            standardize_remove_hs=self.standardize_remove_hs,
+            standardize_kekulize=self.standardize_kekulize,
             standardize_uncharge=self.standardize_uncharge,
             standardize_metals=self.standardize_metals,
         )
@@ -422,6 +430,8 @@ class HorizynDataModule(pl.LightningDataModule):
             rings=True,
             standardize=self.standardize_reactions,
             standardize_hypervalent=self.standardize_hypervalent,
+            standardize_remove_hs=self.standardize_remove_hs,
+            standardize_kekulize=self.standardize_kekulize,
             standardize_uncharge=self.standardize_uncharge,
             standardize_metals=self.standardize_metals,
         )

@@ -455,17 +455,24 @@ The `Standardizer` class normalizes SMILES strings for consistent fingerprint ge
 
 ```python
 standardizer = Standardizer(
-    hypervalent=True,    # Fix hypervalent atoms
-    remove_hs=True,      # Remove hydrogens
-    kekulize=False,      # Keep aromatic representation
-    uncharge=True,       # Neutralize molecules
-    metals=True          # Standardize metals
+    standardize_hypervalent=True,    # Fix hypervalent atoms
+    standardize_remove_hs=True,      # Remove explicit hydrogens
+    standardize_kekulize=False,      # Keep aromatic representation
+    standardize_uncharge=True,       # Neutralize molecules
+    standardize_metals=True          # Standardize metals
 )
 ```
 
+**SOTA Configuration** (all parameters explicitly set):
+- `standardize_hypervalent=True` - Fix double bonds in hypervalent compounds
+- `standardize_remove_hs=True` - Remove explicit hydrogen atoms
+- `standardize_kekulize=False` - Keep aromatic representation (don't kekulize)
+- `standardize_uncharge=True` - Neutralize molecules by protonation/deprotonation
+- `standardize_metals=True` - Disconnect bonds between metals and N, O, F atoms
+
 **Reaction Standardization**: When `reactions=True`, the standardizer processes both sides of the reaction SMILES separately.
 
-**Design Note**: This code handles edge cases in chemical data that would otherwise cause fingerprint generation to fail or produce inconsistent results.
+**Design Note**: This code handles edge cases in chemical data that would otherwise cause fingerprint generation to fail or produce inconsistent results. All five standardization parameters are fully configurable via the config files.
 
 ---
 
@@ -583,6 +590,14 @@ data:
   proteins_path: data/swissprot/proteins_t5_embeddings.h5
   train_batch_size: 16384
   retrieval_batch_size: 128
+  
+  # Reaction standardization (all parameters explicit)
+  standardize_reactions: true
+  standardize_hypervalent: true
+  standardize_remove_hs: true
+  standardize_kekulize: false
+  standardize_uncharge: true
+  standardize_metals: true
 ```
 
 **3. Model**:
@@ -690,6 +705,15 @@ Note: Bidirectional augmentation doubles the reaction count but has minimal impa
 
 ### Data Standardization
 
+**SMILES Standardization**: All reactions are standardized before fingerprint generation using five explicit parameters:
+- `standardize_hypervalent=True` - Fix double bonds in hypervalent compounds
+- `standardize_remove_hs=True` - Remove explicit hydrogen atoms
+- `standardize_kekulize=False` - Keep aromatic representation (don't kekulize)
+- `standardize_uncharge=True` - Neutralize molecules by protonation/deprotonation
+- `standardize_metals=True` - Disconnect bonds between metals and N, O, F atoms
+
+These settings ensure consistent fingerprint generation and match the configuration used in hatchery and the API.
+
 **Schema Consistency**: The SwissProt dataset defines the canonical schema:
 - Table name: `protein_to_reaction` (not `pairs`)
 - Columns: `pr_id`, `reaction_id`, `protein_id`
@@ -789,7 +813,7 @@ The SOTA config (`configs/sota.yaml`) reproduces the paper result:
 **Data Configuration**:
 - **Batch size**: 16384 (large for full-batch MLNCE)
 - **Fingerprints**: RDKit+ (1024) + DRFP (1024) = 2048 total
-- **Standardization**: All standardizers enabled
+- **Standardization**: hypervalent=True, remove_hs=True, kekulize=False, uncharge=True, metals=True
 
 **Model Configuration**:
 - **Query encoder**: 2048 → 4096 → 512 (MLP)
@@ -913,6 +937,8 @@ Each has different data formats and batching requirements. The retrieval dataloa
 **Full Screening Set**: The validation lookup table contains ALL proteins from both training and validation sets (~500K proteins). This ensures validation queries can retrieve their target proteins even if those proteins only appear in validation pairs. Previously, this was a critical bug where ~68% of validation queries had 0% hit rate because their targets weren't in the lookup table.
 
 **Cosine Distance**: The loss function uses cosine distance (1 - cosine similarity) rather than raw similarity scores, providing intuitive semantics where lower values indicate more similar pairs and stable gradients from normalized embeddings.
+
+**Full Standardization**: All five standardization parameters are explicitly configured in the SOTA config (hypervalent, remove_hs, kekulize, uncharge, metals) to ensure reproducibility and match hatchery/API behavior.
 
 ### Performance Optimizations
 
