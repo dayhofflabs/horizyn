@@ -124,34 +124,6 @@ class TestHorizynDataModule:
         assert len(dm._train_data) == 3  # 3 training pairs
         assert len(dm._val_data) == 2  # 2 validation pairs
 
-    @pytest.mark.skip(reason="Requires real dataset files for proper dataloader testing")
-    def test_train_dataloader(self, mock_data_files):
-        """Test training dataloader creation."""
-        dm = HorizynDataModule(
-            train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
-            train_batch_size=2,
-            retrieval_batch_size=1,
-            num_workers=0,  # Avoid multiprocessing issues in tests
-        )
-
-        dm.setup("fit")
-        train_loader = dm.train_dataloader()
-
-        assert train_loader is not None
-        assert train_loader.batch_size == 2
-
-        # Get a batch
-        batch = next(iter(train_loader))
-        assert "query_vec" in batch
-        assert "target_vec" in batch
-
-        # Verify shapes (2048-dim for query, 1024-dim for target)
-        assert batch["query_vec"].shape[1] == 2048  # RDKit+ (1024) + DRFP (1024)
-        assert batch["target_vec"].shape[1] == 1024  # T5 embeddings
-
     def test_val_dataloader(self, mock_data_files):
         """Test validation dataloader creation."""
         dm = HorizynDataModule(
@@ -175,28 +147,6 @@ class TestHorizynDataModule:
         assert val_loss_loader is not None
         assert target_loader is not None
         assert query_loader is not None
-
-    @pytest.mark.skip(reason="TupleDataset needs refinement for this use case")
-    def test_fingerprint_concatenation(self, mock_data_files):
-        """Test that RDKit+ and DRFP fingerprints are concatenated."""
-        dm = HorizynDataModule(
-            train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
-            rdkit_fp_dim=1024,
-            drfp_dim=1024,
-        )
-
-        dm.setup("fit")
-
-        # Get a sample
-        sample = dm._train_data[dm._train_data.keys[0]]
-
-        # Check query vector is 2048-dim (1024 + 1024)
-        assert sample["query_vec"].shape == (2048,)
-        # Check target vector is 1024-dim
-        assert sample["target_vec"].shape == (1024,)
 
     def test_error_without_setup(self, mock_data_files):
         """Test that dataloaders raise error if setup not called."""

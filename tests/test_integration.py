@@ -1036,7 +1036,7 @@ class TestSwissProtFast:
     def test_swissprot_database_schemas(self, check_swissprot_data):
         """
         Test that SwissProt SQLite databases have expected schemas.
-        
+
         This is a fast test that just checks table structure without loading data.
         Runtime: < 1 second
         """
@@ -1046,13 +1046,11 @@ class TestSwissProtFast:
         reactions_db = Path("data/swissprot/reactions.db")
         with sqlite3.connect(str(reactions_db)) as conn:
             cursor = conn.cursor()
-            
+
             # Check reaction table exists
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='reaction'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reaction'")
             assert cursor.fetchone() is not None, "reaction table not found"
-            
+
             # Check expected columns exist
             cursor.execute("PRAGMA table_info(reaction)")
             columns = {row[1] for row in cursor.fetchall()}
@@ -1063,13 +1061,13 @@ class TestSwissProtFast:
         train_pairs_db = Path("data/swissprot/train_pairs.db")
         with sqlite3.connect(str(train_pairs_db)) as conn:
             cursor = conn.cursor()
-            
+
             # Check protein_to_reaction table exists
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='protein_to_reaction'"
             )
             assert cursor.fetchone() is not None, "protein_to_reaction table not found"
-            
+
             # Check expected columns exist
             cursor.execute("PRAGMA table_info(protein_to_reaction)")
             columns = {row[1] for row in cursor.fetchall()}
@@ -1080,11 +1078,12 @@ class TestSwissProtFast:
     def test_swissprot_dataset_sizes(self, check_swissprot_data):
         """
         Test that SwissProt datasets have expected sizes.
-        
+
         This is a fast test that queries row counts without loading data.
         Runtime: < 2 seconds
         """
         import sqlite3
+
         import h5py
 
         # Check training pairs count
@@ -1093,11 +1092,11 @@ class TestSwissProtFast:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM protein_to_reaction")
             train_count = cursor.fetchone()[0]
-            
+
             # SwissProt has ~257k training pairs
-            assert 200_000 < train_count < 300_000, (
-                f"Training pairs count {train_count} outside expected range (200k-300k)"
-            )
+            assert (
+                200_000 < train_count < 300_000
+            ), f"Training pairs count {train_count} outside expected range (200k-300k)"
 
         # Check validation pairs count
         val_pairs_db = Path("data/swissprot/val_pairs.db")
@@ -1105,24 +1104,24 @@ class TestSwissProtFast:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM protein_to_reaction")
             val_count = cursor.fetchone()[0]
-            
+
             # SwissProt has ~36k validation pairs
-            assert 30_000 < val_count < 50_000, (
-                f"Validation pairs count {val_count} outside expected range (30k-50k)"
-            )
+            assert (
+                30_000 < val_count < 50_000
+            ), f"Validation pairs count {val_count} outside expected range (30k-50k)"
 
         # Check protein embeddings count
         proteins_h5 = Path("data/swissprot/proteins_t5_embeddings.h5")
         with h5py.File(str(proteins_h5), "r") as f:
             assert "ids" in f, "ids dataset not found in HDF5"
             assert "vectors" in f, "vectors dataset not found in HDF5"
-            
+
             protein_count = len(f["ids"])
             # SwissProt has ~200k+ proteins
-            assert 150_000 < protein_count < 300_000, (
-                f"Protein count {protein_count} outside expected range (150k-300k)"
-            )
-            
+            assert (
+                150_000 < protein_count < 300_000
+            ), f"Protein count {protein_count} outside expected range (150k-300k)"
+
             # Check embedding dimensions
             embed_shape = f["vectors"].shape
             assert embed_shape[1] == 1024, f"Expected 1024-dim embeddings, got {embed_shape[1]}"
@@ -1153,7 +1152,7 @@ class TestSwissProtSlow:
         - Fingerprints compute successfully
         - Memory footprint is reasonable (~15GB)
         - Datasets have expected sizes
-        
+
         Runtime: 5-10 minutes
         """
         from horizyn.config import load_config
@@ -1314,7 +1313,7 @@ class TestSwissProtSlow:
         - Top-K accuracies are in valid range [0, 1]
         - Loss values are finite
         - Validation runs without errors on full dataset
-        
+
         Runtime: 5-10 minutes on T4 GPU
         """
         import lightning.pytorch as pl

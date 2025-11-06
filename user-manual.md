@@ -881,19 +881,95 @@ python train.py --config configs/nano.yaml --training.max_epochs 2
 
 ## Testing
 
+### Development Workflow
+
+When developing or debugging, follow this recommended workflow for fast feedback:
+
+#### 1. Quick Iteration: Run Training Directly
+
+Run training with limited batches to catch errors immediately:
+
+```bash
+# Fast smoke test with nanodata (~30 seconds)
+python train.py --config configs/nano.yaml \
+    --training.max_epochs 2 \
+    --training.limit_train_batches 10 \
+    --training.limit_val_batches 3
+```
+
+**Why this is better than tests for development**:
+- ✅ See progress bars, loss values, and metrics in real-time
+- ✅ Get immediate feedback with full stack traces
+- ✅ Test exactly how users will run your code
+- ✅ Fast iteration (< 1 minute with nanodata)
+
+For SwissProt testing without waiting for full training:
+
+```bash
+# Test with full data but limited batches (~2 minutes)
+python train.py --config configs/sota.yaml \
+    --training.max_epochs 1 \
+    --training.limit_train_batches 50 \
+    --training.limit_val_batches 10
+```
+
+#### 2. Verification: Run Fast Tests
+
+After confirming training works, run automated tests for verification:
+
+```bash
+# Run all fast tests (unit + smoke + SwissProt fast, ~1 minute)
+pytest -m "not slow"
+```
+
+This runs 20 tests including:
+- All unit tests (datasets, models, losses, metrics)
+- Smoke tests with nanodata (full training pipeline)
+- SwissProt fast tests (data validation without fingerprints)
+
+#### 3. Final Validation: Run Slow Tests (Optional)
+
+Only run slow tests when you're confident everything works:
+
+```bash
+# Run slow SwissProt tests (30+ minutes total)
+pytest -m slow
+```
+
+These tests verify:
+- Full data loading with fingerprint computation (5-10 min)
+- Complete training for 2 epochs (10-15 min)
+- Validation metrics with full dataset (5-10 min)
+
+**When to run slow tests**:
+- Before committing major changes
+- Before creating pull requests
+- In CI/CD pipelines (automated)
+- Not during active development (too slow for iteration)
+
+#### 4. See Test Output in Real-Time
+
+If you must run tests but want to see progress, use `-s` to disable output capture:
+
+```bash
+pytest tests/test_integration.py::TestSwissProtSlow::test_swissprot_full_training_two_epochs -v -s
+```
+
+This shows Lightning's progress bars and training output during the test.
+
 ### Test Organization
 
 The test suite has three tiers:
 
-**Unit Tests**: Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints). Provides 95% code coverage across all modules.
+**Unit Tests** (< 1 minute total): Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints). Provides 95% code coverage across all modules.
 
-**Smoke Tests**: Quick integration tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline in ~5 seconds without downloading SwissProt data. Found in `test_integration.py`.
+**Smoke Tests** (< 10 seconds): Quick integration tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SwissProt data. Found in `test_integration.py`.
 
-**E2E Tests**: Full integration tests using complete SwissProt data (~930 MB). Marked with `@pytest.mark.e2e` and skipped by default. Tests realistic memory usage and training (~10-15 minutes per test).
+**Slow Tests** (30+ minutes total): Full integration tests using complete SwissProt data (~930 MB). Marked with `@pytest.mark.slow` and excluded by default. Tests realistic memory usage, fingerprint computation, and full training runs.
 
 ### Running Tests
 
-Run unit and smoke tests (default):
+Run all fast tests (default, excludes slow tests):
 ```bash
 pytest
 ```
@@ -903,23 +979,34 @@ Run with coverage report:
 pytest --cov=horizyn --cov-report=html
 ```
 
-Run E2E tests (requires SwissProt data):
+Run only slow tests (requires SwissProt data):
 ```bash
 # Download data first
 python scripts/download_data.py
 
-# Run E2E tests
-pytest -m e2e
+# Run slow tests
+pytest -m slow
+```
+
+Run all tests including slow ones:
+```bash
+pytest -v
+# Then manually run: pytest -m slow
 ```
 
 Run specific test file:
 ```bash
-pytest tests/test_model.py
+pytest tests/test_model.py -v
 ```
 
 Run specific test:
 ```bash
-pytest tests/test_model.py::TestMLP::test_forward
+pytest tests/test_model.py::TestMLP::test_forward -v
+```
+
+Run SwissProt fast tests (no slow tests):
+```bash
+pytest tests/test_integration.py::TestSwissProtFast -v
 ```
 
 ### Quick Smoke Test
@@ -927,11 +1014,13 @@ pytest tests/test_model.py::TestMLP::test_forward
 Test the full training pipeline without downloading SwissProt:
 
 ```bash
-# Using pytest (fastest)
-pytest tests/test_integration.py -v
+# Using pytest (fastest, ~10 seconds)
+pytest tests/test_integration.py::TestSmokeNanodata -v
 
-# Or run training directly with nanodata
-python train.py --config configs/nano.yaml --training.max_epochs 2
+# Or run training directly with nanodata (~30 seconds)
+python train.py --config configs/nano.yaml \
+    --training.max_epochs 2 \
+    --training.limit_train_batches 10
 ```
 
 The nanodata files are included in the repository at `data/nanodata/`.
