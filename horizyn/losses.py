@@ -105,9 +105,49 @@ class FullBatchNCELoss(nn.Module):
             module (nn.Module): The current module (self). Required for hook signature.
             input (tuple): Input to the forward pass. Required for hook signature.
         """
-        beta = self.beta.data
-        beta = torch.clamp(beta, self.beta_min, self.beta_max)
-        self.logbeta.data = torch.log(beta)
+        # Use no_grad to safely update parameter without autograd side-effects
+        with torch.no_grad():
+            clamped = torch.clamp(self.beta, self.beta_min, self.beta_max)
+            self.logbeta.copy_(torch.log(clamped))
+
+    def _validate_inputs(
+        self, dists: torch.Tensor, query_idx: torch.Tensor, target_idx: torch.Tensor
+    ) -> None:
+        """Validate inputs for NCE-style losses.
+
+        Args:
+            dists: Pairwise distance matrix of shape (num_queries, num_targets).
+            query_idx: Query indices for positive pairs (shape: (num_pairs,)).
+            target_idx: Target indices for positive pairs (shape: (num_pairs,)).
+
+        Raises:
+            ValueError: If shapes, dtypes, or index ranges are invalid.
+        """
+        if dists.ndim != 2:
+            raise ValueError(
+                f"dists must be rank-2 (num_queries, num_targets), got shape={tuple(dists.shape)}"
+            )
+        if query_idx.dtype != torch.long or target_idx.dtype != torch.long:
+            raise ValueError("query_idx and target_idx must have dtype torch.long")
+        if query_idx.numel() == 0 or target_idx.numel() == 0:
+            raise ValueError("query_idx and target_idx must be non-empty")
+        if query_idx.numel() != target_idx.numel():
+            raise ValueError(
+                f"query_idx and target_idx must have same length, got {query_idx.numel()} and {target_idx.numel()}"
+            )
+        num_queries, num_targets = dists.shape
+        qmin = int(query_idx.min().item())
+        tmin = int(target_idx.min().item())
+        qmax = int(query_idx.max().item())
+        tmax = int(target_idx.max().item())
+        if qmin < 0 or tmin < 0:
+            raise ValueError("query_idx and target_idx must be non-negative")
+        if qmax >= num_queries:
+            raise ValueError(f"query_idx out of range: max={qmax} >= num_queries={num_queries}")
+        if tmax >= num_targets:
+            raise ValueError(f"target_idx out of range: max={tmax} >= num_targets={num_targets}")
+        if not torch.isfinite(dists).all():
+            raise ValueError("dists must be finite (no NaN/Inf values)")
 
     def forward(
         self, dists: torch.Tensor, query_idx: torch.Tensor, target_idx: torch.Tensor
@@ -202,6 +242,9 @@ class FullBatchMLNCELoss(FullBatchNCELoss):
             2. Compute global partition function: logZ = logsumexp(-beta * dists)
             3. Return: mean(beta * pos_dists) + logZ
         """
+        # Validate inputs
+        self._validate_inputs(dists, query_idx, target_idx)
+
         # Extract the distances of the positive pairs (num_pairs,)
         pos_dists = dists[query_idx, target_idx]
 

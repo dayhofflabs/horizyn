@@ -131,10 +131,7 @@ def main():
             drfp_dim=config.data.get("drfp_dim", 1024),
             num_workers=config.data.get("num_workers", 0),
             pin_memory=config.data.get("pin_memory", False),
-            standardize_reactions=config.data.get("standardize_reactions", True),
-            standardize_hypervalent=config.data.get("standardize_hypervalent", True),
-            standardize_uncharge=config.data.get("standardize_uncharge", True),
-            standardize_metals=config.data.get("standardize_metals", True),
+            standardize=config.data.get("standardize_reactions", True),
         )
     except FileNotFoundError as e:
         print(f"\nError: Data file not found")
@@ -158,8 +155,6 @@ def main():
         weight_decay=config.training.weight_decay,
         beta=config.training.loss.beta,
         learn_beta=config.training.loss.get("learn_beta", False),
-        beta_min=config.training.loss.get("beta_min", 0.01),
-        beta_max=config.training.loss.get("beta_max", 100.0),
         metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
     )
 
@@ -193,7 +188,7 @@ def main():
         logger=logger,
         callbacks=[checkpoint_callback],
         log_every_n_steps=config.logging.get("log_every_n_steps", 1),
-        val_check_interval=config.training.get("check_val_every_n_epoch", 10),
+        check_val_every_n_epoch=config.training.get("check_val_every_n_epoch", 10),
         enable_progress_bar=config.training.get("enable_progress_bar", True),
         deterministic=True,  # For reproducibility
         # Single GPU training (DDP not supported in simplified version)
@@ -221,6 +216,7 @@ def main():
     except Exception as e:
         print(f"\n\nError during training: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -232,9 +228,10 @@ def main():
     print(f"Last checkpoint: {checkpoint_callback.last_model_path}")
     print(f"Logs saved to: {config.logging.log_dir}")
     print("\nTo resume training, use:")
-    print(f"    python train.py --config {args.config} --resume {checkpoint_callback.last_model_path}")
+    print(
+        f"    python train.py --config {args.config} --resume {checkpoint_callback.last_model_path}"
+    )
 
 
 if __name__ == "__main__":
     main()
-

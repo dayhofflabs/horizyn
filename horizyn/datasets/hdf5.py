@@ -35,6 +35,12 @@ class EmbedDataset(BaseDataset[str]):
         file (h5py.File): Open HDF5 file handle (if not in_memory).
         data (torch.Tensor): In-memory tensor of all embeddings (if in_memory).
 
+    Note:
+        All keys are converted to strings, even if the 'ids' dataset contains integers.
+        This eliminates ambiguity between integer indices (for DataLoader) and integer keys.
+        - Integer access: `dataset[0]` → array index (first item)
+        - String access: `dataset["P12345"]` → protein ID
+
     Example:
         >>> # Load protein T5 embeddings
         >>> protein_embeds = EmbedDataset(
@@ -135,21 +141,32 @@ class EmbedDataset(BaseDataset[str]):
         # Initialize base dataset with key_to_idx mapping enabled
         super().__init__(keys=keys, use_key_to_idx=True, transforms=transforms, **kwargs)
 
-    def __getitem__(self, key: str) -> torch.Tensor:
+    def __getitem__(self, key: str | int) -> torch.Tensor:
         """
-        Get an embedding vector by key.
+        Get an embedding vector by key or integer index.
 
         Args:
-            key: The identifier from the 'ids' dataset.
+            key: String identifier from the 'ids' dataset, or integer index (0 to len-1).
+                 All HDF5 keys are strings (even if originally integers).
 
         Returns:
             Tensor of shape [vec_dim] containing the embedding.
 
         Raises:
             KeyError: If the key is not found in the dataset.
+            IndexError: If integer index is out of bounds.
         """
-        # Get the index for this key
-        idx = self._get_idx(key)
+        # Handle integer indexing (for DataLoader)
+        if isinstance(key, int):
+            if key < 0 or key >= len(self):
+                raise IndexError(f"Index {key} is out of bounds for dataset of length {len(self)}")
+            actual_key = self.keys[key]
+            idx = key
+        else:
+            # String key lookup
+            actual_key = key
+            # Get the index for this key
+            idx = self._get_idx(actual_key)
 
         if self.in_memory:
             if self.data is None:
@@ -162,7 +179,7 @@ class EmbedDataset(BaseDataset[str]):
             # torch.from_numpy avoids copying and shares memory with numpy array
             vector = torch.from_numpy(self.file["vectors"][idx]).to(dtype=self.dtype)
 
-        return self._apply_transforms(key, vector)
+        return self._apply_transforms(actual_key, vector)
 
     def __del__(self):
         """Close HDF5 file when dataset is destroyed."""

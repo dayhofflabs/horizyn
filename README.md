@@ -11,8 +11,6 @@
 
 Official implementation of the Horizyn SOTA model for contrastive learning between enzymatic reactions and proteins.
 
-> **Note**: This repository is currently under development. Full functionality will be available upon publication of the accompanying research paper.
-
 ## Overview
 
 Horizyn is a dual-encoder contrastive learning model that learns to match enzymatic reactions with their catalyzing proteins. The model uses:
@@ -65,23 +63,35 @@ python train.py --config configs/sota.yaml
 
 ```
 horizyn/
-├── horizyn/              # Main package
-│   ├── model.py         # DualContrastiveModel, MLP
-│   ├── losses.py        # MLNCE loss
-│   ├── metrics.py       # Retrieval metrics
-│   ├── data_module.py   # Lightning DataModule
-│   ├── lightning_module.py  # Training loop
-│   ├── config.py        # Configuration system
-│   ├── datasets/        # Dataset classes
-│   ├── chemistry/       # RDKit utilities
-│   └── utils/           # Utilities
-├── configs/
-│   └── sota.yaml        # SOTA configuration
-├── data/                # Dataset directory
-├── scripts/             # Helper scripts
-├── tests/               # Test suite
-├── train.py             # Training entry point
-└── pyproject.toml       # Dependencies
+├── horizyn/                    # Main package
+│   ├── model.py               # DualContrastiveModel, MLP
+│   ├── lightning_module.py    # Training loop logic
+│   ├── data_module.py         # Data loading orchestration
+│   ├── config.py              # Configuration management
+│   ├── losses.py              # MLNCE loss function
+│   ├── metrics.py             # Retrieval metrics
+│   ├── datasets/              # Dataset classes
+│   │   ├── base.py           # Base dataset abstractions
+│   │   ├── collection.py     # Dataset composition utilities
+│   │   ├── sql.py            # SQLite dataset loader
+│   │   ├── hdf5.py           # HDF5 embedding loader
+│   │   ├── transform.py      # Data transformations
+│   │   └── fingerprints/     # Chemical fingerprint generation
+│   │       ├── base.py       # Fingerprint base class
+│   │       ├── rdkit_plus.py # RDKit structural fingerprints
+│   │       └── drfp.py       # Differential reaction fingerprints
+│   ├── chemistry/             # Chemistry utilities
+│   │   └── standardizer.py   # SMILES standardization
+│   └── utils/                 # Utility functions
+│       ├── cache.py          # In-memory caching
+│       └── collate.py        # Batch collation
+├── configs/                   # Training configurations
+│   ├── sota.yaml             # SOTA configuration
+│   └── nano.yaml             # Small test configuration
+├── scripts/                   # Helper scripts
+│   └── download_data.py      # Dataset download
+├── train.py                   # Main training entry point
+└── tests/                     # Test suite
 ```
 
 ## Model Architecture
@@ -94,24 +104,7 @@ The Horizyn model uses a dual-encoder architecture:
 
 ## Development
 
-Run tests:
-
-```bash
-pytest tests/ -v
-```
-
-Format code:
-
-```bash
-black horizyn/ tests/
-isort horizyn/ tests/
-```
-
-Check linting:
-
-```bash
-flake8 horizyn/ tests/
-```
+See the [User Manual](user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
 
 ## Citation
 

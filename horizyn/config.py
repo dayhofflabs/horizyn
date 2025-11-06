@@ -178,7 +178,7 @@ def validate_config(config: DotDict) -> None:
             )
 
     # Validate model section
-    required_model_keys = ["query_encoder_dims", "target_encoder_dims"]
+    required_model_keys = ["query_encoder_dims", "target_encoder_dims", "embedding_dim"]
     for key in required_model_keys:
         if key not in config.model:
             raise ValueError(
@@ -204,6 +204,11 @@ def validate_config(config: DotDict) -> None:
     if not isinstance(config.model.target_encoder_dims, list):
         raise ValueError(
             f"'model.target_encoder_dims' must be a list, got {type(config.model.target_encoder_dims).__name__}"
+        )
+
+    if not isinstance(config.model.embedding_dim, int):
+        raise ValueError(
+            f"'model.embedding_dim' must be an integer, got {type(config.model.embedding_dim).__name__}"
         )
 
     # Validate paths exist (if they should)

@@ -37,31 +37,11 @@ class TestTrainScript:
         assert '"""' in content, "Missing docstring"
         assert "Usage:" in content, "Missing usage documentation"
 
-    @pytest.mark.skip(reason="Complex integration test - test structure instead")
-    def test_train_main_with_sota_config(self):
-        """Test main function with SOTA config."""
-        # This test would require extensive mocking
-        # Instead, we test that the script can be imported
-        # and that basic argument parsing works
-        pass
-
     def test_train_script_imports(self):
         """Test that train.py imports correctly."""
         import train  # noqa: F401
 
         # Should not raise ImportError
-
-    @pytest.mark.skip(reason="Complex integration test - test argument parsing separately")
-    def test_train_seed_override(self):
-        """Test that --seed argument overrides config seed."""
-        # This would require extensive mocking of all components
-        pass
-
-    @pytest.mark.skip(reason="Complex integration test - test file existence separately")
-    def test_train_missing_config(self):
-        """Test that missing config file produces helpful error."""
-        # This would require mocking the entire training pipeline
-        pass
 
     @patch("sys.argv", ["train.py"])
     def test_train_no_config_argument(self):
@@ -89,4 +69,3 @@ class TestTrainScript:
         assert "--config" in result.stdout
         assert "--seed" in result.stdout
         assert "--resume" in result.stdout
-

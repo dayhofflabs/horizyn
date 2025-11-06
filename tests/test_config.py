@@ -191,6 +191,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -226,6 +227,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -246,6 +248,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     # Missing target_encoder_dims
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -266,6 +269,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {},  # Missing max_epochs
             }
@@ -286,6 +290,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": "100"},  # Wrong type (string)
             }
@@ -306,6 +311,7 @@ class TestValidateConfig:
                 "model": {
                     "query_encoder_dims": "2048,4096,512",  # Wrong type (string)
                     "target_encoder_dims": [1024, 4096, 512],
+                    "embedding_dim": 512,
                 },
                 "training": {"max_epochs": 100},
             }
@@ -385,7 +391,7 @@ class TestLoadConfig:
         config = load_config(str(config_path))
 
         # Should be able to access using dot notation
-        assert config.data.train_pairs_path == "data/train_pairs.db"
+        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
         assert config.model.query_encoder_dims == [2048, 4096, 512]
         assert config.training.learning_rate == 1e-4
 
@@ -411,7 +417,7 @@ class TestIntegration:
         assert config.seed == 123
 
         # Verify validation passed
-        assert config.data.train_pairs_path == "data/train_pairs.db"
+        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
 
     def test_config_modification_after_loading(self):
         """Test that config can be modified after loading."""

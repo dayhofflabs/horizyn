@@ -75,7 +75,7 @@ class RetrievalMetric:
         """
         self.metric_functional = metric_functional
         self.metric_kwargs = metric_kwargs or {}
-        
+
         if reduction not in ["mean", None]:
             raise ValueError(f"reduction must be 'mean' or None, got {reduction}")
         self.reduction = reduction
@@ -103,38 +103,40 @@ class RetrievalMetric:
         # Handle single sample case
         if scores.dim() == 1:
             return self.metric_functional(scores, target_idx, **self.metric_kwargs)
-        
+
         # Handle batch case
         if scores.dim() == 2:
             batch_size = scores.shape[0]
-            
+
             # Ensure target_idx is also 2D
             if target_idx.dim() == 1:
                 raise ValueError(
                     "For batch scores (2D), target_idx must also be 2D. "
                     f"Got scores.shape={scores.shape}, target_idx.shape={target_idx.shape}"
                 )
-            
+            # Ensure batch dimensions match
+            if target_idx.shape[0] != batch_size:
+                raise ValueError(
+                    "Batch size mismatch between scores and target_idx: "
+                    f"scores.shape[0]={batch_size}, target_idx.shape[0]={target_idx.shape[0]}"
+                )
+
             # Compute metric for each sample in the batch
             metric_values = []
             for i in range(batch_size):
-                value = self.metric_functional(
-                    scores[i], target_idx[i], **self.metric_kwargs
-                )
+                value = self.metric_functional(scores[i], target_idx[i], **self.metric_kwargs)
                 metric_values.append(value)
-            
+
             # Stack results
             result = torch.stack(metric_values)
-            
+
             # Apply reduction
             if self.reduction == "mean":
                 return result.mean()
             else:
                 return result
-        
-        raise ValueError(
-            f"scores must be 1D or 2D, got shape {scores.shape}"
-        )
+
+        raise ValueError(f"scores must be 1D or 2D, got shape {scores.shape}")
 
 
 def top_k_hit_rate(scores: Tensor, target_idx: Tensor, k: int = 100) -> Tensor:
@@ -169,25 +171,34 @@ def top_k_hit_rate(scores: Tensor, target_idx: Tensor, k: int = 100) -> Tensor:
             "top_k_hit_rate expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
-    
+
     # Filter out padding (-1)
     valid_targets = target_idx[target_idx >= 0]
-    
+
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
+    # Validate target index dtype and range
+    if valid_targets.numel() > 0:
+        if valid_targets.dtype != torch.long:
+            raise ValueError("target_idx must be dtype torch.long")
+
     # Clamp k to number of items
     num_items = scores.shape[0]
+    if valid_targets.numel() > 0 and int(valid_targets.max().item()) >= num_items:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+        )
     k_clamped = min(k, num_items)
-    
+
     # Get indices of top-K predictions
     top_k_indices = torch.topk(scores, k=k_clamped, largest=True).indices
-    
+
     # Check if any valid target is in top-K
     # torch.isin returns a boolean tensor indicating which targets are in top_k_indices
     hit = torch.isin(valid_targets, top_k_indices).any()
-    
+
     return torch.tensor(1.0 if hit else 0.0, device=scores.device)
 
 
@@ -223,28 +234,35 @@ def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
             "mean_reciprocal_rank expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
-    
+
     # Filter out padding (-1)
     valid_targets = target_idx[target_idx >= 0]
-    
+
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+    if int(valid_targets.max().item()) >= scores.shape[0]:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
+        )
+
     # Get the sorted indices (descending order of scores)
     sorted_indices = torch.argsort(scores, descending=True)
-    
+
     # Find the ranks (1-indexed) of all valid targets
     # Create a mapping from index to rank
     ranks = torch.zeros(scores.shape[0], dtype=torch.long, device=scores.device)
     ranks[sorted_indices] = torch.arange(1, scores.shape[0] + 1, device=scores.device)
-    
+
     # Get ranks of valid targets
     target_ranks = ranks[valid_targets]
-    
+
     # Find the minimum rank (best rank)
     best_rank = target_ranks.min().float()
-    
+
     # Return reciprocal rank
     return 1.0 / best_rank
 
@@ -277,17 +295,24 @@ def positive_score(scores: Tensor, target_idx: Tensor) -> Tensor:
             "positive_score expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
-    
+
     # Filter out padding (-1)
     valid_targets = target_idx[target_idx >= 0]
-    
+
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+    if int(valid_targets.max().item()) >= scores.shape[0]:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
+        )
+
     # Get scores of positive items
     pos_scores = scores[valid_targets]
-    
+
     return pos_scores.mean()
 
 
@@ -320,24 +345,30 @@ def negative_score(scores: Tensor, target_idx: Tensor) -> Tensor:
             "negative_score expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
-    
+
     # Filter out padding (-1)
     valid_targets = target_idx[target_idx >= 0]
-    
+
     # Create a mask for negative items (all items not in valid_targets)
     num_items = scores.shape[0]
     neg_mask = torch.ones(num_items, dtype=torch.bool, device=scores.device)
-    
+
     if len(valid_targets) > 0:
+        if valid_targets.dtype != torch.long:
+            raise ValueError("target_idx must be dtype torch.long")
+        if int(valid_targets.max().item()) >= num_items:
+            raise ValueError(
+                f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+            )
         neg_mask[valid_targets] = False
-    
+
     # Get scores of negative items
     neg_scores = scores[neg_mask]
-    
+
     if len(neg_scores) == 0:
         # All items are positive, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
     return neg_scores.mean()
 
 
@@ -383,9 +414,9 @@ def create_retrieval_metrics(
     """
     if top_k is None:
         top_k = [1, 10, 100, 1000]
-    
+
     metrics = {}
-    
+
     # Top-K hit rate metrics
     for k in top_k:
         metrics[f"top_{k}"] = RetrievalMetric(
@@ -393,26 +424,25 @@ def create_retrieval_metrics(
             metric_kwargs={"k": k},
             reduction="mean",
         )
-    
+
     # Mean Reciprocal Rank
     if include_mrr:
         metrics["mrr"] = RetrievalMetric(
             metric_functional=mean_reciprocal_rank,
             reduction="mean",
         )
-    
+
     # Positive/negative score metrics
     if pos_score:
         metrics["pos_score"] = RetrievalMetric(
             metric_functional=positive_score,
             reduction="mean",
         )
-    
+
     if neg_score:
         metrics["neg_score"] = RetrievalMetric(
             metric_functional=negative_score,
             reduction="mean",
         )
-    
-    return metrics
 
+    return metrics

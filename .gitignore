@@ -80,14 +80,13 @@ models/
 outputs/
 
 # Data files (exclude large datasets, keep structure)
-data/*.db
-data/*.h5
-data/*.hdf5
-data/*.tar.gz
-data/*.zip
+/data/**
+!/data/**/
 # Keep README and placeholders
-!data/README.md
-!data/.gitkeep
+!/data/**/.gitkeep
+!/data/**/README.md
+!/data/nanodata/**
+
 
 # Cache
 .cache/
@@ -107,8 +106,9 @@ Thumbs.db
 *.swo
 .vscode/settings.json
 
-# DVC (not using, but good to have)
-.dvc/
+# Always track DVC and .py files, even in ignored folders
+!*.dvc
+!*.py
 
 # Temporary files
 tmp/

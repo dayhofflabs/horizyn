@@ -29,6 +29,11 @@ class TestIsAromatic:
         with pytest.raises(ValueError, match="invalid SMILES"):
             is_smiles_aromatic("invalid")
 
+    def test_empty_string_raises(self):
+        """Empty SMILES should raise ValueError."""
+        with pytest.raises(ValueError, match="empty SMILES"):
+            is_smiles_aromatic("")
+
 
 class TestHypervalentStandardizer:
     """Tests for HypervalentStandardizer."""
@@ -194,6 +199,12 @@ class TestStandardizer:
         assert len(parts[0]) > 0  # Reactants
         assert len(parts[1]) > 0  # Products
 
+    def test_invalid_reaction_raises_error(self):
+        """Invalid reaction strings should raise a ValueError with context."""
+        standardizer = Standardizer()
+        with pytest.raises(ValueError):
+            standardizer.standardize_reaction("not_a_reaction")
+
     def test_standardize_complex_molecule(self):
         """Test standardization of a more complex molecule."""
         standardizer = Standardizer()
@@ -242,6 +253,19 @@ class TestStandardizer:
         with pytest.raises(ValueError):
             standardizer.standardize_molecule("definitely_not_valid_smiles_123")
 
+    def test_empty_molecule_raises_error(self):
+        """Empty SMILES input should raise ValueError."""
+        standardizer = Standardizer()
+        with pytest.raises(ValueError):
+            standardizer.standardize_molecule("")
+
+    def test_canonicalization_ethanol(self):
+        """Non-canonical inputs should canonicalize to a consistent SMILES."""
+        standardizer = Standardizer()
+        # "OCC" should canonicalize to "CCO"
+        result = standardizer.standardize_molecule("OCC")
+        assert result == "CCO"
+
     def test_standardize_reaction_preserves_structure(self):
         """Test that reaction standardization preserves arrow direction."""
         standardizer = Standardizer()
@@ -251,4 +275,3 @@ class TestStandardizer:
         # Should not be reversed
         parts = result.split(">>")
         assert len(parts) == 2
-

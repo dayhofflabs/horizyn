@@ -49,6 +49,10 @@ class HorizynDataModule(pl.LightningDataModule):
         rdkit_fp_dim: Dimension of RDKit+ fingerprints. Defaults to 1024.
         drfp_dim: Dimension of DRFP fingerprints. Defaults to 1024.
         standardize: Whether to standardize SMILES. Defaults to True.
+        standardize_reactions: Whether to standardize reactions. Defaults to True.
+        standardize_hypervalent: Whether to standardize hypervalent atoms. Defaults to True.
+        standardize_uncharge: Whether to uncharge molecules. Defaults to True.
+        standardize_metals: Whether to standardize metals. Defaults to True.
 
     Example:
         >>> dm = HorizynDataModule(
@@ -75,6 +79,10 @@ class HorizynDataModule(pl.LightningDataModule):
         rdkit_fp_dim: int = 1024,
         drfp_dim: int = 1024,
         standardize: bool = True,
+        standardize_reactions: bool = True,
+        standardize_hypervalent: bool = True,
+        standardize_uncharge: bool = True,
+        standardize_metals: bool = True,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -97,6 +105,10 @@ class HorizynDataModule(pl.LightningDataModule):
         self.rdkit_fp_dim = rdkit_fp_dim
         self.drfp_dim = drfp_dim
         self.standardize = standardize
+        self.standardize_reactions = standardize_reactions
+        self.standardize_hypervalent = standardize_hypervalent
+        self.standardize_uncharge = standardize_uncharge
+        self.standardize_metals = standardize_metals
 
         # Dataset containers (populated in setup)
         self._train_data = None
@@ -126,9 +138,10 @@ class HorizynDataModule(pl.LightningDataModule):
         # Load training pairs
         train_pairs = SQLDataset(
             file_path=str(self.train_pairs_path),
-            table_name="pairs",
-            search_key="pair_id",
-            columns=["query_id", "target_id"],
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["reaction_id", "protein_id"],
+            rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
             in_memory=True,
         )
         print(f"  Loaded {len(train_pairs)} training pairs")
@@ -145,12 +158,12 @@ class HorizynDataModule(pl.LightningDataModule):
         self._train_data = TupleDataset(
             tuple_dataset=train_pairs,
             key_name_to_dataset={
-                "query": self._query_data,
-                "target": self._target_data,
+                "query_id": self._query_data,
+                "target_id": self._target_data,
             },
             rename_map={
-                "query": "query_vec",
-                "target": "target_vec",
+                "query_id": "query_vec",
+                "target_id": "target_vec",
             },
         )
 
@@ -163,9 +176,10 @@ class HorizynDataModule(pl.LightningDataModule):
         # Load validation pairs
         val_pairs = SQLDataset(
             file_path=str(self.val_pairs_path),
-            table_name="pairs",
-            search_key="pair_id",
-            columns=["query_id", "target_id"],
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["reaction_id", "protein_id"],
+            rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
             in_memory=True,
         )
         print(f"  Loaded {len(val_pairs)} validation pairs")
@@ -181,12 +195,12 @@ class HorizynDataModule(pl.LightningDataModule):
         self._val_data = TupleDataset(
             tuple_dataset=val_pairs,
             key_name_to_dataset={
-                "query": self._query_data,
-                "target": self._target_data,
+                "query_id": self._query_data,
+                "target_id": self._target_data,
             },
             rename_map={
-                "query": "query_vec",
-                "target": "target_vec",
+                "query_id": "query_vec",
+                "target_id": "target_vec",
             },
         )
 
@@ -194,10 +208,10 @@ class HorizynDataModule(pl.LightningDataModule):
         self._val_query_data = TupleDataset(
             tuple_dataset=val_pairs,
             key_name_to_dataset={
-                "query": self._query_data,
+                "query_id": self._query_data,
             },
             rename_map={
-                "query": "query_vec",
+                "query_id": "query_vec",
             },
         )
 
@@ -213,7 +227,7 @@ class HorizynDataModule(pl.LightningDataModule):
         # Load reaction SMILES
         reactions = SQLDataset(
             file_path=str(self.reactions_path),
-            table_name="reactions",
+            table_name="reaction",
             search_key="reaction_id",
             columns=["reaction_smiles"],
             in_memory=True,
@@ -226,10 +240,10 @@ class HorizynDataModule(pl.LightningDataModule):
             mol_fp_type="morgan",
             rxn_fp_type="struct",
             use_chirality=True,
-            standardize=self.standardize,
-            standardize_hypervalent=True,
-            standardize_uncharge=True,
-            standardize_metals=True,
+            standardize=self.standardize_reactions,
+            standardize_hypervalent=self.standardize_hypervalent,
+            standardize_uncharge=self.standardize_uncharge,
+            standardize_metals=self.standardize_metals,
         )
 
         # Generate DRFP fingerprints (1024-dim)
@@ -238,10 +252,10 @@ class HorizynDataModule(pl.LightningDataModule):
             vec_dim=self.drfp_dim,
             radius=3,
             rings=True,
-            standardize=self.standardize,
-            standardize_hypervalent=True,
-            standardize_uncharge=True,
-            standardize_metals=True,
+            standardize=self.standardize_reactions,
+            standardize_hypervalent=self.standardize_hypervalent,
+            standardize_uncharge=self.standardize_uncharge,
+            standardize_metals=self.standardize_metals,
         )
 
         # Merge fingerprints
@@ -266,6 +280,26 @@ class HorizynDataModule(pl.LightningDataModule):
             file_path=str(self.proteins_path),
             in_memory=True,
         )
+
+    @property
+    def train_data(self):
+        """Access to training dataset (read-only)."""
+        return self._train_data
+
+    @property
+    def val_data(self):
+        """Access to validation dataset (read-only)."""
+        return self._val_data
+
+    @property
+    def val_query_data(self):
+        """Access to validation query dataset (read-only)."""
+        return self._val_query_data
+
+    @property
+    def val_retrieval_pairs(self):
+        """Access to validation query dataset (alias for compatibility)."""
+        return self._val_query_data
 
     def train_dataloader(self) -> DataLoader:
         """

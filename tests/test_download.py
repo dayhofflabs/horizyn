@@ -77,7 +77,7 @@ class TestDownloadScript:
             assert "train_pairs.db" in config["files"]
             assert "val_pairs.db" in config["files"]
             assert "reactions.db" in config["files"]
-            assert "proteins_t5.h5" in config["files"]
+            assert "proteins_t5_embeddings.h5" in config["files"]
 
         finally:
             sys.path.pop(0)
@@ -125,7 +125,9 @@ class TestDownloadScript:
             test_file.write_bytes(b"Hello, World!")
 
             # Use wrong hash
-            wrong_checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            wrong_checksum = (
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            )
 
             # Verify
             result = download_data.verify_checksum(test_file, wrong_checksum)
@@ -218,11 +220,11 @@ class TestDownloadScript:
 
         assert result.returncode == 0
         assert "usage:" in result.stdout.lower()
-        assert "--output_dir" in result.stdout
+        assert "--output-dir" in result.stdout
         assert "--skip_checksum" in result.stdout
         assert "--force" in result.stdout
 
-    @patch("sys.argv", ["download_data.py", "--output_dir", "data/"])
+    @patch("sys.argv", ["download_data.py", "--output-dir", "data/"])
     def test_download_with_placeholder_url(self):
         """Test that placeholder URL produces helpful error."""
         import sys
@@ -261,7 +263,7 @@ class TestDownloadScript:
                 "train_pairs.db",
                 "val_pairs.db",
                 "reactions.db",
-                "proteins_t5.h5",
+                "proteins_t5_embeddings.h5",
             ]
 
             for required_file in required_files:
@@ -269,6 +271,3 @@ class TestDownloadScript:
 
         finally:
             sys.path.pop(0)
-
-
-

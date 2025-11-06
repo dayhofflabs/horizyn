@@ -96,12 +96,12 @@ def cached_method(cache_attr: str = "_cache"):
         >>> class FingerprintGenerator:
         ...     def __init__(self):
         ...         self._cache = InMemoryCache()
-        ...     
+        ...
         ...     @cached_method()
         ...     def generate(self, smiles: str):
         ...         # Expensive computation
         ...         return compute_fingerprint(smiles)
-        >>> 
+        >>>
         >>> gen = FingerprintGenerator()
         >>> fp1 = gen.generate("CCO")  # Computed
         >>> fp2 = gen.generate("CCO")  # Cached
@@ -130,4 +130,3 @@ def cached_method(cache_attr: str = "_cache"):
         return wrapper
 
     return decorator
-

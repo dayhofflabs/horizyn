@@ -1,0 +1,1040 @@
+# Horizyn User Manual
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Component Details](#component-details)
+4. [Data Pipeline](#data-pipeline)
+5. [Training Pipeline](#training-pipeline)
+6. [Configuration System](#configuration-system)
+7. [Usage Guide](#usage-guide)
+8. [Implementation Details](#implementation-details)
+9. [Testing](#testing)
+
+---
+
+## Overview
+
+Horizyn is a contrastive learning framework for matching enzymatic reactions with their catalyzing proteins. The system uses a dual-encoder architecture that learns a shared embedding space where reactions and their associated proteins are positioned close together.
+
+### Key Features
+
+- **Dual Encoder Architecture**: Separate encoders for reactions (chemical fingerprints) and proteins (pre-computed embeddings)
+- **Multi-Label NCE Loss**: Handles the many-to-many relationship between reactions and proteins
+- **Full Batch Training**: All training data loaded into memory for efficient contrastive learning
+- **Pre-split Datasets**: Eliminates variability from data splitting
+- **Single GPU**: Optimized for single-GPU training without distributed computing complexity
+
+### Design Philosophy
+
+Horizyn contains the code required to train the State-of-the-Art (SOTA) model from [the paper](https://www.biorxiv.org/content/10.1101/2025.08.21.671639v1). Every component directly contributes to training this single configuration. The codebase prioritizes:
+
+- **Clarity**: Self-documenting code with comprehensive docstrings
+- **Reproducibility**: Fixed data splits and deterministic training
+- **Simplicity**: No extensibility abstractions or unused features
+- **Performance**: All data in memory for fast training
+
+---
+
+## Architecture
+
+### System Components
+
+```
+horizyn/
+├── horizyn/                    # Main package
+│   ├── model.py               # Neural network architectures
+│   ├── lightning_module.py    # PyTorch Lightning training logic
+│   ├── data_module.py         # Data loading orchestration
+│   ├── config.py              # Configuration management
+│   ├── losses.py              # Loss functions (MLNCE)
+│   ├── metrics.py             # Retrieval metrics
+│   ├── datasets/              # Dataset classes
+│   │   ├── base.py           # Base dataset abstractions
+│   │   ├── collection.py     # Dataset composition utilities
+│   │   ├── sql.py            # SQLite dataset loader
+│   │   ├── hdf5.py           # HDF5 embedding loader
+│   │   ├── transform.py      # Data transformations
+│   │   └── fingerprints/     # Chemical fingerprint generation
+│   │       ├── base.py       # Fingerprint base class
+│   │       ├── rdkit_plus.py # RDKit structural fingerprints
+│   │       └── drfp.py       # Differential reaction fingerprints
+│   ├── chemistry/             # Chemistry utilities
+│   │   └── standardizer.py   # SMILES standardization
+│   └── utils/                 # Utility functions
+│       ├── cache.py          # In-memory caching
+│       └── collate.py        # Batch collation
+├── configs/                   # Training configurations
+│   ├── sota.yaml             # SOTA configuration
+│   └── nano.yaml             # Small test configuration
+├── scripts/                   # Helper scripts
+│   └── download_data.py      # Dataset download
+├── train.py                   # Main training entry point
+└── tests/                     # Test suite
+```
+
+### Data Flow
+
+The training pipeline follows this data flow:
+
+```
+1. Configuration Loading (config.py)
+   ↓
+2. Data Module Setup (data_module.py)
+   ├── Load training pairs (SQLDataset)
+   ├── Load validation pairs (SQLDataset)
+   ├── Load reactions (SQLDataset)
+   ├── Generate RDKit+ fingerprints (RDKitPlusFingerprintDataset)
+   ├── Generate DRFP fingerprints (DRFPFingerprintDataset)
+   ├── Concatenate fingerprints (MergeDataset + ConcatTensorTransform)
+   └── Load protein embeddings (EmbedDataset)
+   ↓
+3. Lightning Module (lightning_module.py)
+   ├── Initialize model (DualContrastiveModel)
+   ├── Initialize loss (FullBatchMLNCELoss)
+   └── Initialize metrics (create_retrieval_metrics)
+   ↓
+4. Training Loop
+   ├── Forward pass through dual encoders
+   ├── Compute MLNCE loss
+   ├── Backward pass and optimizer step
+   └── Validation with retrieval metrics
+   ↓
+5. Checkpointing and Logging
+```
+
+---
+
+## Component Details
+
+### Model Architecture (`horizyn/model.py`)
+
+The model module contains three main classes:
+
+#### 1. BaseModel
+
+A foundational class providing structure for organizing layers into preprocessing, main body, and postprocessing stages. All Horizyn models inherit from this.
+
+**Key Features**:
+- Organized layer structure (pre_nn_layers, main_nn, post_nn_layers)
+- Optional output heads for multi-task learning
+- Parameter counting utilities
+- Device management helpers
+
+#### 2. NormalizeLayer
+
+A simple layer that L2-normalizes its input, crucial for contrastive learning.
+
+```python
+output = F.normalize(input, p=2, dim=-1)
+```
+
+#### 3. MLP (Multi-Layer Perceptron)
+
+The core encoder architecture used for both reactions and proteins.
+
+**Configuration**:
+- `layer_widths`: List of layer dimensions (e.g., [2048, 4096, 512])
+- `use_batch_norm`: Apply batch normalization after each layer
+- `use_layer_norm`: Apply layer normalization instead of batch norm
+- `dropout`: Dropout probability between layers
+- `activation`: Activation function (default: ReLU)
+- `normalize_output`: L2-normalize final output (required for contrastive learning)
+
+**SOTA Configuration**:
+- Query encoder: [2048, 4096, 512] (reaction fingerprints → embeddings)
+- Target encoder: [1024, 4096, 512] (protein embeddings → embeddings)
+- No batch norm, no dropout, ReLU activation, normalized output
+
+#### 4. DualContrastiveModel
+
+The top-level model combining two encoders into a dual-encoder architecture.
+
+**Components**:
+- `query_encoder`: Processes reaction fingerprints
+- `target_encoder`: Processes protein embeddings
+- Both produce 512-dimensional normalized embeddings
+
+**Forward Pass**:
+```python
+query_embeddings = model.query_encoder(reaction_fingerprints)
+target_embeddings = model.target_encoder(protein_embeddings)
+# Both are L2-normalized for cosine similarity computation
+```
+
+---
+
+### Loss Functions (`horizyn/losses.py`)
+
+#### FullBatchMLNCELoss (Multi-Label Noise Contrastive Estimation)
+
+The core loss function that handles many-to-many relationships between reactions and proteins.
+
+**Key Concepts**:
+
+1. **Contrastive Learning**: Pulls positive pairs close together while pushing negative pairs apart
+2. **Multi-Label Support**: Each query can have multiple valid targets (and vice versa)
+3. **Symmetric Loss**: Computes both query→target and target→query losses
+4. **Temperature Scaling**: Controls the concentration of the distribution (beta parameter)
+
+**How It Works**:
+
+Given a batch of query embeddings Q and target embeddings T:
+
+1. Compute pairwise cosine distances: `D = 1 - (Q @ T^T)`
+2. Apply temperature scaling: `scaled_distances = beta * D`
+3. For each query, identify all positive targets in the batch
+4. Compute log-sum-exp over all targets, weighted by positive labels
+5. Compute symmetric loss (query→target and target→query)
+
+**Parameters**:
+- `beta`: Temperature parameter (SOTA uses 10.0, fixed)
+- `learn_beta`: Whether to learn beta during training (SOTA uses False)
+- `beta_min`, `beta_max`: Constraints on beta if learned
+
+**Key Design Decision**: Uses cosine distance (1 - cosine similarity) rather than raw similarities, which provides more stable gradients.
+
+---
+
+### Metrics (`horizyn/metrics.py`)
+
+The metrics module provides retrieval evaluation during validation.
+
+#### Top-K Hit Rate
+
+Measures the percentage of queries where at least one correct target appears in the top K retrievals.
+
+```python
+top_k_hit_rate(distances, targets, k=10)
+# Returns: fraction of queries with at least one positive in top-K
+```
+
+#### Mean Reciprocal Rank (MRR)
+
+Computes the average of 1/rank for the first positive target.
+
+```python
+MRR = mean(1 / rank_of_first_positive)
+```
+
+#### Positive/Negative Score Metrics
+
+Track the distribution of scores for positive and negative pairs:
+- `positive_score`: Mean distance for true positive pairs
+- `negative_score`: Mean distance for negative pairs
+
+**Validation Process**:
+
+The validation loop uses three dataloaders:
+
+1. **Loss Dataloader**: Computes validation loss on held-out pairs
+2. **Lookup Table Dataloader**: Loads all target embeddings
+3. **Retrieval Dataloader**: Queries against the lookup table
+
+For each query:
+- Compute distances to all targets in the lookup table
+- Rank targets by distance
+- Compute Top-K hit rates (K = 1, 10, 100, 1000)
+- Compute MRR, positive scores, negative scores
+
+---
+
+### Data Module (`horizyn/data_module.py`)
+
+The `HorizynDataModule` orchestrates all data loading and preprocessing.
+
+#### Initialization Phase
+
+When `setup("fit")` is called:
+
+1. **Load Training Data**:
+   - Training pairs from SQLite (reaction_id, protein_id)
+   - Reactions from SQLite (reaction_id, SMILES)
+   - Protein embeddings from HDF5 (protein_id → 1024-dim T5 embedding)
+
+2. **Generate Fingerprints**:
+   - RDKit+ structural fingerprints (1024-dim) from reaction SMILES
+   - DRFP differential fingerprints (1024-dim) from reaction SMILES
+   - Concatenate to produce 2048-dim reaction fingerprints
+
+3. **Create Training Dataset**:
+   - Merge fingerprints with protein embeddings based on pairs
+   - All data loaded into memory (~15GB for SwissProt)
+
+4. **Repeat for Validation Data**:
+   - Separate validation pairs for retrieval metrics
+   - Reuse reaction fingerprints and protein embeddings (no recomputation)
+
+#### Key Design: Memory vs Speed Tradeoff
+
+Horizyn loads all data into memory for maximum training speed. This requires:
+- ~15GB RAM for full SwissProt dataset
+- But eliminates I/O bottlenecks during training
+- All fingerprints computed once, cached forever
+
+**Data Reuse Optimization**: The same reaction fingerprints and protein embeddings are shared between training and validation datasets, avoiding redundant computation.
+
+---
+
+### Dataset Classes (`horizyn/datasets/`)
+
+The dataset system is built on composable abstractions:
+
+#### Base Classes (`base.py`)
+
+**BaseDataset**: Foundation for all datasets
+
+- **Key-based access**: `dataset[key]` where key is a unique identifier (string)
+- **Index-based access**: `dataset[0]` for iteration compatibility
+- **Transform support**: Apply functions to data on access
+- **Lazy or eager loading**: Subclasses choose their strategy
+
+**Design Decision**: All database keys are converted to strings during loading to avoid ambiguity with integer indices. This creates clean separation:
+- Integers are always indices (0, 1, 2, ...)
+- Strings are always keys ("rxn_123", "prot_456", ...)
+
+**WrapperDataset**: Applies transforms to existing datasets
+
+```python
+transformed = WrapperDataset(original, transform=my_transform)
+```
+
+#### Collection Classes (`collection.py`)
+
+**MergeDataset**: Combines multiple datasets by key intersection
+
+```python
+merged = MergeDataset(dataset1, dataset2, dataset3)
+# Returns: {key: {**data1, **data2, **data3}} for all common keys
+```
+
+Used to combine reaction fingerprints with protein embeddings.
+
+**TupleDataset**: Pairs data from multiple datasets
+
+```python
+paired = TupleDataset(
+    queries=reactions,
+    targets=proteins,
+    pairs=[(rxn_id, prot_id), ...],
+    rename_map={"queries": "reaction", "targets": "protein"}
+)
+```
+
+**Key Feature**: `skip_missing=True` (default) filters out pairs referencing non-existent keys with warnings, allowing training to proceed with imperfect data.
+
+#### SQL Datasets (`sql.py`)
+
+**SQLDataset**: Loads data from SQLite databases
+
+```python
+dataset = SQLDataset(
+    db_path="reactions.db",
+    table="reaction",
+    id_column="reaction_id",
+    columns=["smiles"],
+    rename_map={"smiles": "reaction"},
+    in_memory=True  # Load all data into RAM
+)
+```
+
+**Features**:
+- Column selection and renaming
+- In-memory or on-the-fly loading
+- Automatic string key conversion
+- Missing data handling
+
+#### HDF5 Datasets (`hdf5.py`)
+
+**EmbedDataset**: Loads embeddings from HDF5 files
+
+HDF5 files must contain two datasets: `ids` (string identifiers) and `vectors` (embedding matrix).
+
+```python
+dataset = EmbedDataset(
+    file_path="data/swissprot/proteins_t5_embeddings.h5",
+    in_memory=True,  # Load all embeddings into RAM
+    dtype=torch.float32
+)
+```
+
+**Features**:
+- Handles string or byte ID formats
+- Memory-efficient HDF5 indexing when not in_memory
+- Pre-loading for fast access during training
+
+#### Fingerprint Datasets (`datasets/fingerprints/`)
+
+**BaseFingerprintDataset** (`base.py`): Foundation for fingerprint generation
+
+- Integrates with `Standardizer` for consistent SMILES processing
+- Caches fingerprints in memory after first computation
+- Wraps existing datasets (e.g., SQLDataset with SMILES)
+
+**RDKitPlusFingerprintDataset** (`rdkit_plus.py`): Structural fingerprints
+
+Generates RDKit fingerprints for reactions using two approaches:
+
+1. **Structural ("struct")**: Concatenate product and reactant fingerprints
+   ```
+   fp = concat(product_fp, reactant_fp)
+   ```
+
+2. **Difference ("diff")**: Compute product - reactant difference
+   ```
+   fp = product_fp - reactant_fp
+   ```
+
+**SOTA uses "struct" mode** with Morgan fingerprints (radius=3, 1024 bits).
+
+**Supported fingerprint types**:
+- Morgan (circular fingerprints)
+- AtomPair (atom pair fingerprints)
+- TopologicalTorsion (torsion fingerprints)
+- RDKit (Daylight-like fingerprints)
+- Pattern (pattern fingerprints)
+
+**DRFPFingerprintDataset** (`drfp.py`): Differential reaction fingerprints
+
+Generates DRFP fingerprints that encode reaction transformations directly.
+
+```python
+drfp_fp = DrfpEncoder.encode(
+    rxn_smiles,
+    radius=3,
+    rings=True
+)
+```
+
+**SOTA uses 1024-bit DRFP** with radius=3 and rings=True.
+
+---
+
+### Chemistry Utilities (`horizyn/chemistry/`)
+
+#### Standardizer (`standardizer.py`)
+
+The `Standardizer` class normalizes SMILES strings for consistent fingerprint generation.
+
+**Standardization Steps**:
+
+1. **Hypervalent atoms**: Fix unusual valence states
+2. **Hydrogen removal**: Remove explicit hydrogens
+3. **Kekulization**: Convert aromatic forms to explicit bonds
+4. **Uncharging**: Neutralize molecules where appropriate
+5. **Metal standardization**: Handle metal-containing compounds
+
+**Configuration**:
+
+```python
+standardizer = Standardizer(
+    hypervalent=True,    # Fix hypervalent atoms
+    remove_hs=True,      # Remove hydrogens
+    kekulize=False,      # Keep aromatic representation
+    uncharge=True,       # Neutralize molecules
+    metals=True          # Standardize metals
+)
+```
+
+**Reaction Standardization**: When `reactions=True`, the standardizer processes both sides of the reaction SMILES separately.
+
+**Design Note**: This code handles edge cases in chemical data that would otherwise cause fingerprint generation to fail or produce inconsistent results.
+
+---
+
+### Lightning Module (`horizyn/lightning_module.py`)
+
+The `HorizynLitModule` implements the PyTorch Lightning training loop.
+
+#### Training Step
+
+For each batch:
+
+1. **Extract Data**:
+   ```python
+   query_fps = batch["reaction"]     # Reaction fingerprints
+   target_embeds = batch["protein"]  # Protein embeddings
+   pair_ids = batch["pr_id"]         # Pair IDs
+   ```
+
+2. **Deduplicate**: Remove duplicate pairs within the batch (important for MLNCE)
+
+3. **Forward Pass**:
+   ```python
+   query_embeds = model.query_encoder(query_fps)
+   target_embeds = model.target_encoder(target_embeds)
+   ```
+
+4. **Compute Loss**:
+   ```python
+   loss = loss_fn(
+       query_embeds=query_embeds,
+       target_embeds=target_embeds,
+       query_ids=query_ids,
+       target_ids=target_ids
+   )
+   ```
+
+5. **Log Metrics**: Training loss logged every step
+
+#### Validation Step
+
+Validation uses three separate dataloaders:
+
+**Dataloader 0: Loss Computation**
+```python
+val_loss = loss_fn(query_embeds, target_embeds, query_ids, target_ids)
+```
+
+**Dataloader 1: Lookup Table Building**
+
+Builds a complete lookup table of all target embeddings:
+```python
+lookup_table = {target_id: embedding for all targets}
+```
+
+**Dataloader 2: Retrieval Metrics**
+
+For each query:
+1. Compute distances to all targets in lookup table
+2. Rank targets by distance (ascending)
+3. Compute Top-K hit rates, MRR, score distributions
+
+**Why Three Dataloaders?**
+
+This design separates three distinct validation tasks:
+1. Measure generalization (validation loss)
+2. Prepare retrieval infrastructure (lookup table)
+3. Evaluate retrieval performance (metrics)
+
+Each has different batching requirements and data access patterns.
+
+#### Optimizer Configuration
+
+SOTA uses AdamW:
+
+```python
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=1e-4,
+    weight_decay=0.01
+)
+```
+
+No learning rate scheduler in the SOTA configuration.
+
+---
+
+### Configuration System (`horizyn/config.py`)
+
+The configuration system loads YAML files and applies command-line overrides.
+
+#### Config Structure
+
+Configs are organized into four sections:
+
+**1. Logging**:
+```yaml
+logging:
+  log_dir: logs
+  checkpoint_dir: checkpoints
+  save_every_n_epochs: 10
+```
+
+**2. Data**:
+```yaml
+data:
+  train_pairs_path: data/swissprot/train_pairs.db
+  val_pairs_path: data/swissprot/val_pairs.db
+  reactions_path: data/swissprot/reactions.db
+  proteins_path: data/swissprot/proteins_t5_embeddings.h5
+  train_batch_size: 16384
+  retrieval_batch_size: 128
+```
+
+**3. Model**:
+```yaml
+model:
+  name: DualContrastiveModel
+  query_encoder_dims: [2048, 4096, 512]
+  target_encoder_dims: [1024, 4096, 512]
+  embedding_dim: 512
+```
+
+**4. Training**:
+```yaml
+training:
+  max_epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  loss:
+    name: FullBatchMLNCELoss
+    beta: 10.0
+    learn_beta: false
+```
+
+#### DotDict Access
+
+Configs are loaded as `DotDict` objects supporting both dict and attribute access:
+
+```python
+config = load_config("configs/sota.yaml")
+config.data.train_batch_size  # Attribute access
+config["data"]["train_batch_size"]  # Dict access
+```
+
+#### Command-Line Overrides
+
+Override any config value from the command line:
+
+```bash
+python train.py --config configs/sota.yaml \
+    --training.max_epochs 50 \
+    --data.train_batch_size 8192 \
+    --seed 123
+```
+
+Override syntax supports:
+- `--key=value` (equals sign)
+- `--key value` (space-separated)
+- Nested keys with dots: `--section.subsection.key value`
+
+---
+
+## Data Pipeline
+
+### Data Format
+
+Horizyn expects four files:
+
+#### 1. Training Pairs (`train_pairs.db`)
+
+SQLite database with table `protein_to_reaction`:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| pr_id | INTEGER | Unique pair ID |
+| reaction_id | TEXT | Reaction identifier |
+| protein_id | TEXT | Protein identifier |
+
+#### 2. Validation Pairs (`val_pairs.db`)
+
+Same schema as training pairs, disjoint set for validation.
+
+#### 3. Reactions (`reactions.db`)
+
+SQLite database with table `reaction`:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| reaction_id | TEXT | Unique reaction ID |
+| smiles | TEXT | Reaction SMILES string |
+
+Format: `reactants>>products` (e.g., `CC(=O)O>>CO.CC(=O)`)
+
+#### 4. Protein Embeddings (`proteins_t5_embeddings.h5`)
+
+HDF5 file with two datasets:
+
+- `ids`: Array of protein IDs (strings or bytes)
+- `embeddings`: Array of shape (N, 1024) with T5 embeddings
+
+**Key Requirement**: IDs in pairs files must match IDs in reactions.db and proteins.h5.
+
+### Memory Requirements
+
+For SwissProt dataset:
+- **Training pairs**: ~100K pairs → ~1 MB
+- **Validation pairs**: ~20K pairs → ~200 KB
+- **Reactions**: ~50K reactions → ~50 MB (SMILES strings)
+- **Protein embeddings**: ~500K proteins × 1024 floats → ~2 GB
+- **RDKit+ fingerprints**: ~50K reactions × 1024 bits → ~6 MB (cached)
+- **DRFP fingerprints**: ~50K reactions × 1024 bits → ~6 MB (cached)
+
+**Total**: ~2.2 GB base + ~10 GB working memory during training = **~15 GB RAM**
+
+### Data Standardization
+
+**Schema Consistency**: The SwissProt dataset defines the canonical schema:
+- Table name: `protein_to_reaction` (not `pairs`)
+- Columns: `pr_id`, `reaction_id`, `protein_id`
+
+Other datasets use `rename_map` to adapt their schema to this standard without modifying the actual database files.
+
+---
+
+## Training Pipeline
+
+### Full Training Workflow
+
+#### 1. Setup
+
+```bash
+# Install dependencies
+uv sync
+
+# Download data
+python scripts/download_data.py --output_dir data/
+```
+
+#### 2. Training
+
+```bash
+python train.py --config configs/sota.yaml
+```
+
+**What Happens**:
+
+1. **Config Loading** (< 1 second)
+   - Parse YAML config
+   - Apply command-line overrides
+   - Set random seeds
+
+2. **Data Module Setup** (1-2 minutes)
+   - Load training pairs into memory
+   - Load validation pairs into memory
+   - Load all reactions into memory
+   - Load all protein embeddings into memory
+   - Generate and cache all RDKit+ fingerprints
+   - Generate and cache all DRFP fingerprints
+   - Create training and validation datasets
+
+3. **Model Initialization** (< 1 second)
+   - Initialize dual encoders (MLP networks)
+   - Move to GPU
+   - Initialize loss function
+   - Initialize optimizer
+
+4. **Training Loop** (hours, depending on epochs)
+   - For each epoch:
+     - Iterate through training batches
+     - Forward pass through dual encoders
+     - Compute MLNCE loss
+     - Backward pass and optimizer step
+     - Log training loss
+   - Every N epochs:
+     - Run validation
+     - Compute validation loss
+     - Compute retrieval metrics
+     - Save checkpoint
+
+5. **Checkpointing**
+   - Save model weights every 10 epochs (configurable)
+   - Save final checkpoint at end
+   - Checkpoints include full model state for resuming
+
+#### 3. Monitoring
+
+Training progress is logged to:
+- **Terminal**: Progress bars, loss values, metrics
+- **CSV logs**: `lightning_logs/version_X/metrics.csv`
+- **Checkpoints**: `checkpoints/epoch=X-step=Y.ckpt`
+
+### Resuming Training
+
+To resume from a checkpoint:
+
+```bash
+python train.py --config configs/sota.yaml --resume checkpoints/last.ckpt
+```
+
+The system automatically:
+- Loads model weights
+- Restores optimizer state
+- Continues from the saved epoch
+
+---
+
+## Configuration System
+
+### SOTA Configuration Explained
+
+The SOTA config (`configs/sota.yaml`) reproduces the paper result:
+
+**Data Configuration**:
+- **Batch size**: 16384 (large for full-batch MLNCE)
+- **Fingerprints**: RDKit+ (1024) + DRFP (1024) = 2048 total
+- **Standardization**: All standardizers enabled
+
+**Model Configuration**:
+- **Query encoder**: 2048 → 4096 → 512 (MLP)
+- **Target encoder**: 1024 → 4096 → 512 (MLP)
+- **Output**: 512-dim L2-normalized embeddings
+
+**Training Configuration**:
+- **Epochs**: 100
+- **Optimizer**: AdamW with lr=1e-4, weight_decay=0.01
+- **Loss**: MLNCE with beta=10.0 (fixed)
+- **Validation**: Every 10 epochs
+
+**Why These Choices?**
+
+- **Large batch size**: MLNCE benefits from many negative examples per batch
+- **Single hidden layer**: Simple architecture avoids overfitting
+- **Fixed beta**: Temperature found through ablation studies
+- **No learning rate schedule**: Training is stable with constant lr
+
+### Nano Configuration
+
+For testing, `configs/nano.yaml` uses a tiny dataset:
+- 10 training pairs, 5 validation pairs
+- ~5 reactions, ~8 proteins
+- Completes in seconds
+
+**Use for**:
+- Smoke testing after code changes
+- Debugging training loop
+- CI/CD integration tests
+
+---
+
+## Usage Guide
+
+### Basic Training
+
+Train the SOTA model:
+
+```bash
+python train.py --config configs/sota.yaml
+```
+
+### Custom Training
+
+Override batch size:
+
+```bash
+python train.py --config configs/sota.yaml --data.train_batch_size 8192
+```
+
+Train for fewer epochs:
+
+```bash
+python train.py --config configs/sota.yaml --training.max_epochs 50
+```
+
+Change learning rate:
+
+```bash
+python train.py --config configs/sota.yaml --training.learning_rate 0.0005
+```
+
+### Using Your Own Data
+
+1. **Prepare your data** in the required format (see Data Format section)
+
+2. **Create a custom config**:
+
+```yaml
+data:
+  train_pairs_path: path/to/your/train_pairs.db
+  val_pairs_path: path/to/your/val_pairs.db
+  reactions_path: path/to/your/reactions.db
+  proteins_path: path/to/your/proteins.h5
+```
+
+3. **Train**:
+
+```bash
+python train.py --config your_config.yaml
+```
+
+### Debugging
+
+Enable detailed logging:
+
+```bash
+python train.py --config configs/nano.yaml --log_every_n_steps 1
+```
+
+Use nano config for quick testing:
+
+```bash
+python train.py --config configs/nano.yaml --training.max_epochs 2
+```
+
+---
+
+## Implementation Details
+
+### Key Design Decisions
+
+**String Keys**: All database keys are converted to strings during loading to avoid ambiguity with integer indices used by PyTorch DataLoader. This creates clean separation where integers are always indices and strings are always keys.
+
+**Skip Missing Pairs**: `TupleDataset` filters out pairs referencing non-existent keys by default with warnings. This allows training to proceed when reactions or proteins are filtered from the dataset for quality reasons.
+
+**Three Validation Dataloaders**: Validation uses three separate dataloaders for distinct tasks: computing loss on held-out pairs, building a lookup table of all target embeddings, and evaluating retrieval metrics. Each has different data formats and batching requirements.
+
+**Memory-First Design**: All data loads into memory and fingerprints compute once at initialization. This eliminates I/O bottlenecks for maximum training speed at the cost of requiring ~15GB RAM. The large batch size (16384) benefits from memory-resident data enabling fast random access during shuffling.
+
+**Cosine Distance**: The loss function uses cosine distance (1 - cosine similarity) rather than raw similarity scores, providing intuitive semantics where lower values indicate more similar pairs and stable gradients from normalized embeddings.
+
+### Performance Optimizations
+
+**Batch Size**: SOTA uses 16384 because MLNCE requires many negative examples per query and memory allows it (2048-dim fingerprints × 16384 samples = 128 MB per batch).
+
+**Data Loading Workers**: SOTA uses 0 workers since all data is in memory with no I/O to parallelize, avoiding worker process overhead.
+
+**Fingerprint Caching**: Fingerprints compute once per dataset instance on first access and cache in memory as a dict with no serialization overhead.
+
+---
+
+## Testing
+
+### Development Workflow
+
+When developing or debugging, follow this recommended workflow for fast feedback:
+
+#### 1. Quick Iteration: Run Training Directly
+
+Run training with limited batches to catch errors immediately:
+
+```bash
+# Fast smoke test with nanodata (~30 seconds)
+python train.py --config configs/nano.yaml \
+    --training.max_epochs 2 \
+    --training.limit_train_batches 10 \
+    --training.limit_val_batches 3
+```
+
+**Why this is better than tests for development**:
+- ✅ See progress bars, loss values, and metrics in real-time
+- ✅ Get immediate feedback with full stack traces
+- ✅ Test exactly how users will run your code
+- ✅ Fast iteration (< 1 minute with nanodata)
+
+For SwissProt testing without waiting for full training:
+
+```bash
+# Test with full data but limited batches (~2 minutes)
+python train.py --config configs/sota.yaml \
+    --training.max_epochs 1 \
+    --training.limit_train_batches 50 \
+    --training.limit_val_batches 10
+```
+
+#### 2. Verification: Run Fast Tests
+
+After confirming training works, run automated tests for verification:
+
+```bash
+# Run all fast tests (unit + smoke + SwissProt fast, ~1 minute)
+pytest -m "not slow"
+```
+
+This runs 20 tests including:
+- All unit tests (datasets, models, losses, metrics)
+- Smoke tests with nanodata (full training pipeline)
+- SwissProt fast tests (data validation without fingerprints)
+
+#### 3. Final Validation: Run Slow Tests (Optional)
+
+Only run slow tests when you're confident everything works:
+
+```bash
+# Run slow SwissProt tests (30+ minutes total)
+pytest -m slow
+```
+
+These tests verify:
+- Full data loading with fingerprint computation (5-10 min)
+- Complete training for 2 epochs (10-15 min)
+- Validation metrics with full dataset (5-10 min)
+
+**When to run slow tests**:
+- Before committing major changes
+- Before creating pull requests
+- In CI/CD pipelines (automated)
+- Not during active development (too slow for iteration)
+
+#### 4. See Test Output in Real-Time
+
+If you must run tests but want to see progress, use `-s` to disable output capture:
+
+```bash
+pytest tests/test_integration.py::TestSwissProtSlow::test_swissprot_full_training_two_epochs -v -s
+```
+
+This shows Lightning's progress bars and training output during the test.
+
+### Test Organization
+
+The test suite has three tiers:
+
+**Unit Tests** (< 1 minute total): Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints). Provides 95% code coverage across all modules.
+
+**Smoke Tests** (< 10 seconds): Quick integration tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SwissProt data. Found in `test_integration.py`.
+
+**Slow Tests** (30+ minutes total): Full integration tests using complete SwissProt data (~930 MB). Marked with `@pytest.mark.slow` and excluded by default. Tests realistic memory usage, fingerprint computation, and full training runs.
+
+### Running Tests
+
+Run all fast tests (default, excludes slow tests):
+```bash
+pytest
+```
+
+Run with coverage report:
+```bash
+pytest --cov=horizyn --cov-report=html
+```
+
+Run only slow tests (requires SwissProt data):
+```bash
+# Download data first
+python scripts/download_data.py
+
+# Run slow tests
+pytest -m slow
+```
+
+Run all tests including slow ones:
+```bash
+pytest -v
+# Then manually run: pytest -m slow
+```
+
+Run specific test file:
+```bash
+pytest tests/test_model.py -v
+```
+
+Run specific test:
+```bash
+pytest tests/test_model.py::TestMLP::test_forward -v
+```
+
+Run SwissProt fast tests (no slow tests):
+```bash
+pytest tests/test_integration.py::TestSwissProtFast -v
+```
+
+### Quick Smoke Test
+
+Test the full training pipeline without downloading SwissProt:
+
+```bash
+# Using pytest (fastest, ~10 seconds)
+pytest tests/test_integration.py::TestSmokeNanodata -v
+
+# Or run training directly with nanodata (~30 seconds)
+python train.py --config configs/nano.yaml \
+    --training.max_epochs 2 \
+    --training.limit_train_batches 10
+```
+
+The nanodata files are included in the repository at `data/nanodata/`.
+
+### Code Quality
+
+Format code:
+```bash
+black horizyn/ tests/
+isort horizyn/ tests/
+```
+
+Check linting:
+```bash
+flake8 horizyn/ tests/
+```
+

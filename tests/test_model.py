@@ -217,12 +217,28 @@ class TestMLP:
         has_dropout = any(isinstance(layer, nn.Dropout) for layer in mlp.main_nn)
         assert has_dropout
 
+    def test_invalid_dropout_raises(self):
+        """Dropout outside [0,1] should raise ValueError."""
+        with pytest.raises(ValueError, match="dropout must be in the range"):
+            MLP(input_dim=10, output_dim=5, num_layers=1, widths=20, dropout=1.5)
+        with pytest.raises(ValueError, match="dropout must be in the range"):
+            MLP(input_dim=10, output_dim=5, num_layers=1, widths=20, dropout=-0.1)
+
     def test_mlp_parameter_count(self):
         """Test parameter counting in MLP."""
         mlp = MLP(input_dim=10, output_dim=5, num_layers=1, widths=20)
         # Params: (10*20 + 20) + (20*5 + 5) = 245
         expected_params = (10 * 20 + 20) + (20 * 5 + 5)
         assert mlp.num_parameters == expected_params
+
+    def test_invalid_widths_raises(self):
+        """Zero or negative widths should raise ValueError when layers > 0."""
+        with pytest.raises(ValueError, match="widths must be a positive integer"):
+            MLP(input_dim=10, output_dim=5, num_layers=1, widths=0)
+        with pytest.raises(ValueError, match="positive integers"):
+            MLP(input_dim=10, output_dim=5, num_layers=2, widths=[16, 0])
+        with pytest.raises(ValueError, match="non-empty"):
+            MLP(input_dim=10, output_dim=5, num_layers=1, widths=[])
 
     def test_mlp_gradient_flow(self, device):
         """Test that gradients flow correctly through MLP."""
@@ -252,6 +268,11 @@ class TestMLP:
             if isinstance(layer, nn.Linear):
                 assert layer.bias is None
 
+    def test_num_layers_negative_raises(self):
+        """Negative num_layers should raise ValueError."""
+        with pytest.raises(ValueError, match="num_layers must be >= 0"):
+            MLP(input_dim=10, output_dim=5, num_layers=-1, widths=20)
+
     def test_mlp_custom_activation(self, device):
         """Test MLP with custom activation functions."""
         mlp = MLP(
@@ -264,6 +285,19 @@ class TestMLP:
         x = torch.randn(4, 10, device=device)
         output = mlp(x)
         assert output.shape == (4, 5)
+
+    def test_activation_length_mismatch_raises(self):
+        """Mismatch between activations and hidden layers should raise ValueError."""
+        with pytest.raises(ValueError, match="Number of activations must match"):
+            MLP(input_dim=10, output_dim=5, num_layers=2, widths=[16, 16], activations=[nn.ReLU()])
+
+    def test_single_activation_instance_is_copied(self):
+        """Supplying a single activation instance should result in distinct module copies per layer."""
+        mlp = MLP(input_dim=10, output_dim=5, num_layers=2, widths=20, activations=nn.GELU())
+        # Extract activation modules
+        activs = [layer for layer in mlp.main_nn if isinstance(layer, nn.GELU)]
+        assert len(activs) == 2
+        assert activs[0] is not activs[1]
 
     def test_mlp_single_width_multiple_layers(self, device):
         """Test that single width int creates multiple layers of same width."""
@@ -425,7 +459,7 @@ class TestDualContrastiveModel:
         query_inputs = torch.randn(8, 100, device=device)
         target_inputs = torch.randn(8, 100, device=device)
 
-        with pytest.raises(ValueError, match="output dimension mismatch"):
+        with pytest.raises(ValueError, match="output shape mismatch"):
             model(query_inputs, target_inputs)
 
     def test_enforce_normalization(self):

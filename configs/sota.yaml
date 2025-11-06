@@ -14,10 +14,11 @@ logging:
 # Data configuration
 data:
   # Paths to pre-split datasets (relative to project root)
-  train_pairs_path: data/train_pairs.db
-  val_pairs_path: data/val_pairs.db
-  reactions_path: data/reactions.db
-  proteins_path: data/proteins_t5.h5
+  # Full SwissProt dataset for SOTA training
+  train_pairs_path: data/swissprot/train_pairs.db
+  val_pairs_path: data/swissprot/val_pairs.db
+  reactions_path: data/swissprot/reactions.db
+  proteins_path: data/swissprot/proteins_t5_embeddings.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)
