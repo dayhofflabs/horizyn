@@ -351,3 +351,150 @@ class TestSmokeValidationMetrics:
             f"All top-K metrics are zero (top_1={top_1}, top_10={top_10}). "
             "This suggests validation metrics are not working correctly."
         )
+
+
+class TestScreeningSet:
+    """Tests for full screening set (train + val proteins)."""
+
+    def test_screening_set_includes_train_and_val_proteins(self):
+        """Test that screening set includes ALL proteins from train and val that exist in HDF5."""
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.datasets.hdf5 import EmbedDataset
+        from horizyn.datasets.sql import SQLDataset
+
+        config = load_config("configs/nano.yaml")
+        dm = HorizynDataModule(**config.data)
+        dm.setup("fit")
+
+        # Get protein IDs from training and validation pairs
+        train_pairs = SQLDataset(
+            file_path=config.data.train_pairs_path,
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["protein_id"],
+            in_memory=True,
+        )
+
+        val_pairs = SQLDataset(
+            file_path=config.data.val_pairs_path,
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["protein_id"],
+            in_memory=True,
+        )
+
+        # Get protein IDs that actually exist in the HDF5 file
+        all_proteins_hdf5 = EmbedDataset(
+            file_path=config.data.proteins_path,
+            in_memory=True,
+        )
+        available_protein_ids = set(all_proteins_hdf5.keys)
+
+        # Collect unique protein IDs from pairs
+        train_protein_ids = set(train_pairs[k]["protein_id"] for k in train_pairs.keys)
+        val_protein_ids = set(val_pairs[k]["protein_id"] for k in val_pairs.keys)
+        all_protein_ids_from_pairs = train_protein_ids | val_protein_ids
+
+        # Filter to only proteins that exist in HDF5
+        all_protein_ids = all_protein_ids_from_pairs & available_protein_ids
+
+        # Check that screening set has all proteins that exist in HDF5
+        screening_protein_ids = set(dm._screening_target_data.keys)
+
+        # All proteins that exist should be in screening set
+        missing_proteins = all_protein_ids - screening_protein_ids
+        assert (
+            len(missing_proteins) == 0
+        ), f"Missing {len(missing_proteins)} proteins from screening set: {missing_proteins}"
+
+        # Check that screening set contains at least the union of train and val proteins
+        assert len(screening_protein_ids) >= len(
+            all_protein_ids
+        ), "Screening set should have at least all train+val proteins that exist in HDF5"
+
+    def test_val_only_proteins_retrievable(self):
+        """Test that proteins only in validation (not training) are in screening set."""
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.datasets.sql import SQLDataset
+
+        config = load_config("configs/nano.yaml")
+        dm = HorizynDataModule(**config.data)
+        dm.setup("fit")
+
+        # Get protein IDs
+        train_pairs = SQLDataset(
+            file_path=config.data.train_pairs_path,
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["protein_id"],
+            in_memory=True,
+        )
+
+        val_pairs = SQLDataset(
+            file_path=config.data.val_pairs_path,
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["protein_id"],
+            in_memory=True,
+        )
+
+        train_protein_ids = set(train_pairs[k]["protein_id"] for k in train_pairs.keys)
+        val_protein_ids = set(val_pairs[k]["protein_id"] for k in val_pairs.keys)
+
+        # Find validation-only proteins
+        val_only_proteins = val_protein_ids - train_protein_ids
+
+        if len(val_only_proteins) > 0:
+            # Check that val-only proteins are in screening set
+            screening_protein_ids = set(dm._screening_target_data.keys)
+
+            for prot_id in val_only_proteins:
+                assert (
+                    prot_id in screening_protein_ids
+                ), f"Val-only protein {prot_id} not in screening set"
+
+    def test_validation_lookup_table_uses_full_screening_set(self, tmp_path):
+        """Test that validation metrics use the full screening set."""
+        import lightning.pytorch as pl
+
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+        from horizyn.lightning_module import HorizynLitModule
+
+        config = load_config("configs/nano.yaml")
+
+        # Setup
+        dm = HorizynDataModule(**config.data)
+        dm.setup("fit")
+
+        lit_module = HorizynLitModule(
+            query_encoder_dims=config.model.query_encoder_dims,
+            target_encoder_dims=config.model.target_encoder_dims,
+            embedding_dim=config.model.embedding_dim,
+            beta=config.training.loss.beta,
+            learn_beta=config.training.loss.learn_beta,
+            learning_rate=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+        )
+
+        # Train for 1 epoch with limited batches
+        trainer = pl.Trainer(
+            max_epochs=1,
+            limit_train_batches=3,
+            limit_val_batches=0,  # Skip val batches
+            enable_checkpointing=False,
+            logger=False,
+        )
+
+        # Manually trigger validation epoch start to build lookup table
+        trainer.fit_loop.epoch_loop.val_loop._data_fetcher = None
+        lit_module.trainer = trainer
+        lit_module.trainer.datamodule = dm
+        lit_module.on_validation_epoch_start()
+
+        # Check that lookup table size matches screening set (not just training proteins)
+        assert lit_module.num_targets == len(
+            dm._screening_target_data
+        ), f"Lookup table size {lit_module.num_targets} != screening set size {len(dm._screening_target_data)}"

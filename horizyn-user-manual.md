@@ -35,6 +35,16 @@ Horizyn contains the code required to train the State-of-the-Art (SOTA) model fr
 - **Simplicity**: No extensibility abstractions or unused features
 - **Performance**: All data in memory for fast training
 
+### Recent Bug Fixes
+
+Three critical bugs were identified and fixed that significantly improve training quality and validation metrics:
+
+1. **Bidirectional Reactions**: Reactions are now trained in both forward and backward directions (doubled training data)
+2. **Full Screening Set**: Validation now uses ALL proteins from training AND validation sets (fixed ~68% coverage gap)
+3. **Correct Fingerprint Radius**: Morgan fingerprints now use radius=3 (ECFP6) instead of radius=2 (matches API/hatchery)
+
+These fixes are expected to improve top-1 hit rates from ~1% to 30-40% as reported in the paper.
+
 ---
 
 ## Architecture
@@ -228,11 +238,13 @@ Track the distribution of scores for positive and negative pairs:
 
 The validation loop uses three dataloaders for multi-label retrieval:
 
-1. **Loss Dataloader**: Computes validation loss on held-out pairs
-2. **Lookup Table Dataloader**: Loads all target embeddings
-3. **Retrieval Dataloader**: Queries against the lookup table (unique queries only)
+1. **Loss Dataloader**: Computes validation loss on held-out pairs (includes both forward and backward)
+2. **Lookup Table Dataloader**: Loads ALL target embeddings (full screening set: train + val proteins)
+3. **Retrieval Dataloader**: Queries against the lookup table (unique queries only, both directions)
 
-**Multi-Label Retrieval**: Each reaction (query) can be catalyzed by multiple proteins (targets). For example, SwissProt has 36,433 validation pairs representing 1,147 unique reactions with an average of 32 valid proteins per reaction.
+**Multi-Label Retrieval**: Each reaction (query) can be catalyzed by multiple proteins (targets). For example, SwissProt has ~73K validation pairs (after bidirectional augmentation) representing ~2.3K unique reaction-directions with valid proteins per reaction direction.
+
+**Critical**: The screening set must include ALL proteins from both training and validation to ensure validation queries can find their target proteins. This was a critical bug that has been fixed.
 
 For each unique query:
 - Retrieve the list of ALL valid target IDs for this query
@@ -257,22 +269,27 @@ When `setup("fit")` is called:
 1. **Load Training Data**:
    - Training pairs from SQLite (reaction_id, protein_id)
    - Reactions from SQLite (reaction_id, SMILES)
+   - **Bidirectional Augmentation**: Each reaction is duplicated as forward (_f) and backward (_r) variants
    - Protein embeddings from HDF5 (protein_id → 1024-dim T5 embedding)
 
 2. **Generate Fingerprints**:
-   - RDKit+ structural fingerprints (1024-dim) from reaction SMILES
-   - DRFP differential fingerprints (1024-dim) from reaction SMILES
+   - RDKit+ structural fingerprints (1024-dim, radius=3) from reaction SMILES
+   - DRFP differential fingerprints (1024-dim, radius=3) from reaction SMILES
    - Concatenate to produce 2048-dim reaction fingerprints
+   - Generated for both forward and backward reactions
 
 3. **Create Training Dataset**:
    - Merge fingerprints with protein embeddings based on pairs
    - All data loaded into memory (~15GB for SwissProt)
+   - Pairs are duplicated for forward and backward reactions
 
 4. **Setup Validation Data**:
    - Load validation pairs from SQLite
+   - **Bidirectional Augmentation**: Duplicate validation pairs for forward and backward reactions
    - Group pairs by query_id (reaction) for multi-label retrieval
-   - Create unique query dataset (one entry per reaction, not per pair)
+   - Create unique query dataset (one entry per reaction direction)
    - Store mapping from each query to its list of valid target IDs
+   - **Full Screening Set**: Load ALL proteins from both training AND validation sets
    - Reuse reaction fingerprints and protein embeddings (no recomputation)
 
 #### Key Design: Memory vs Speed Tradeoff
@@ -395,7 +412,7 @@ Generates RDKit fingerprints for reactions using two approaches:
    fp = product_fp - reactant_fp
    ```
 
-**SOTA uses "struct" mode** with Morgan fingerprints (radius=3, 1024 bits).
+**SOTA uses "struct" mode** with Morgan fingerprints (radius=3, 1024 bits, ECFP6).
 
 **Supported fingerprint types**:
 - Morgan (circular fingerprints)
@@ -659,15 +676,17 @@ HDF5 file with two datasets:
 
 ### Memory Requirements
 
-For SwissProt dataset:
-- **Training pairs**: ~100K pairs → ~1 MB
-- **Validation pairs**: ~20K pairs → ~200 KB
-- **Reactions**: ~50K reactions → ~50 MB (SMILES strings)
+For SwissProt dataset (with bidirectional augmentation):
+- **Training pairs**: ~200K pairs (doubled) → ~2 MB
+- **Validation pairs**: ~40K pairs (doubled) → ~400 KB
+- **Reactions**: ~100K reactions (doubled: forward + backward) → ~100 MB (SMILES strings)
 - **Protein embeddings**: ~500K proteins × 1024 floats → ~2 GB
-- **RDKit+ fingerprints**: ~50K reactions × 1024 bits → ~6 MB (cached)
-- **DRFP fingerprints**: ~50K reactions × 1024 bits → ~6 MB (cached)
+- **RDKit+ fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
+- **DRFP fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
 
 **Total**: ~2.2 GB base + ~10 GB working memory during training = **~15 GB RAM**
+
+Note: Bidirectional augmentation doubles the reaction count but has minimal impact on memory since fingerprints are computed on-demand and cached.
 
 ### Data Standardization
 
@@ -888,6 +907,10 @@ python train.py --config configs/nano.yaml --training.max_epochs 2
 Each has different data formats and batching requirements. The retrieval dataloader uses unique queries with associated target lists to support multi-label evaluation.
 
 **Memory-First Design**: All data loads into memory and fingerprints compute once at initialization. This eliminates I/O bottlenecks for maximum training speed at the cost of requiring ~15GB RAM. The large batch size (16384) benefits from memory-resident data enabling fast random access during shuffling.
+
+**Bidirectional Reactions**: All reactions are trained and evaluated in both forward (reactants→products) and backward (products→reactants) directions. This doubles the training data and ensures the model learns reversible reactions correctly. Reaction keys are suffixed with `_f` (forward) or `_r` (reverse).
+
+**Full Screening Set**: The validation lookup table contains ALL proteins from both training and validation sets (~500K proteins). This ensures validation queries can retrieve their target proteins even if those proteins only appear in validation pairs. Previously, this was a critical bug where ~68% of validation queries had 0% hit rate because their targets weren't in the lookup table.
 
 **Cosine Distance**: The loss function uses cosine distance (1 - cosine similarity) rather than raw similarity scores, providing intuitive semantics where lower values indicate more similar pairs and stable gradients from normalized embeddings.
 

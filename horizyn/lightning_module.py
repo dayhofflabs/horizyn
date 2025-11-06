@@ -238,8 +238,9 @@ class HorizynLitModule(pl.LightningModule):
         # Get datamodule to determine number of targets
         datamodule = self.trainer.datamodule
 
-        # Preallocate target lookup table
-        self.num_targets = len(datamodule._target_data)
+        # Preallocate target lookup table using FULL screening set (train + val proteins)
+        # CRITICAL: Must use _screening_target_data, not _target_data
+        self.num_targets = len(datamodule._screening_target_data)
         vec_dim = self.model.target_encoder.output_dim
 
         self.target_lookup_table = torch.zeros(
@@ -248,7 +249,7 @@ class HorizynLitModule(pl.LightningModule):
 
         # Create mapping from target IDs to lookup table indices
         self.target_id_to_idx = {
-            target_id: idx for idx, target_id in enumerate(datamodule._target_data.keys)
+            target_id: idx for idx, target_id in enumerate(datamodule._screening_target_data.keys)
         }
 
     def _update_target_lookup_table(self, batch: Dict[str, Any], target_embeds: torch.Tensor):
