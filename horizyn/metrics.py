@@ -183,7 +183,7 @@ def top_k_hit_rate(scores: Tensor, target_idx: Tensor, k: int = 100) -> Tensor:
     if valid_targets.numel() > 0:
         if valid_targets.dtype != torch.long:
             raise ValueError("target_idx must be dtype torch.long")
-    
+
     # Clamp k to number of items
     num_items = scores.shape[0]
     if valid_targets.numel() > 0 and int(valid_targets.max().item()) >= num_items:
@@ -241,7 +241,7 @@ def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
     if valid_targets.dtype != torch.long:
         raise ValueError("target_idx must be dtype torch.long")
     if int(valid_targets.max().item()) >= scores.shape[0]:
@@ -302,7 +302,7 @@ def positive_score(scores: Tensor, target_idx: Tensor) -> Tensor:
     if len(valid_targets) == 0:
         # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
-    
+
     if valid_targets.dtype != torch.long:
         raise ValueError("target_idx must be dtype torch.long")
     if int(valid_targets.max().item()) >= scores.shape[0]:

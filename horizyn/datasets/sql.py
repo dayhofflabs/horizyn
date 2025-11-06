@@ -27,7 +27,7 @@ class SQLDataset(BaseDataset[str]):
         rename_map (Dict[str, str]): Mapping to rename columns in output.
         in_memory (bool): Whether data is loaded into memory.
         _data (Dict[str, Dict[str, Any]]): In-memory data cache.
-    
+
     Note:
         All keys are converted to strings, even if the search_key column contains integers.
         This eliminates ambiguity between integer indices (for DataLoader) and integer keys.
@@ -180,7 +180,7 @@ class SQLDataset(BaseDataset[str]):
 
     def _load_keys(self) -> List[str]:
         """Load all unique keys from the search_key column.
-        
+
         Keys are always converted to strings to eliminate ambiguity between
         integer indices (for DataLoader) and integer keys (from database).
         """

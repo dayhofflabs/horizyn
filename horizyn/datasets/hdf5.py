@@ -34,7 +34,7 @@ class EmbedDataset(BaseDataset[str]):
         vec_dim (int): Dimension of each vector.
         file (h5py.File): Open HDF5 file handle (if not in_memory).
         data (torch.Tensor): In-memory tensor of all embeddings (if in_memory).
-    
+
     Note:
         All keys are converted to strings, even if the 'ids' dataset contains integers.
         This eliminates ambiguity between integer indices (for DataLoader) and integer keys.

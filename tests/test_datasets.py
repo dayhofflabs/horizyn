@@ -436,10 +436,10 @@ class TestTupleDataset:
 
         # Keys should match since all pairs are valid
         assert tuple_ds.keys == pairs.keys
-        
+
         # array_data delegates to tuple_dataset
         assert tuple_ds.array_data == pairs.array_data
-        
+
         # key_to_idx is based on filtered keys (though in this case all are valid)
         assert len(tuple_ds.key_to_idx) == len(pairs.keys)
         assert all(key in tuple_ds.key_to_idx for key in pairs.keys)
@@ -536,9 +536,7 @@ class TestTupleDataset:
         queries = BaseDataset(keys=["q1"], array_data=torch.tensor([[1.0]]))
         targets = BaseDataset(keys=["t1"], array_data=torch.tensor([[10.0]]))
 
-        pairs = BaseDataset(
-            keys=["pair1"], array_data=[{"query_id": "q1", "target_id": "t1"}]
-        )
+        pairs = BaseDataset(keys=["pair1"], array_data=[{"query_id": "q1", "target_id": "t1"}])
 
         tuple_ds = TupleDataset(
             tuple_dataset=pairs,
