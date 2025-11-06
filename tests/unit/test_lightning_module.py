@@ -457,3 +457,41 @@ class TestHorizynLitModule:
         assert lit_module.hparams.embedding_dim == 128
         assert lit_module.hparams.beta == 5.0
         assert lit_module.hparams.learning_rate == 1e-3
+
+    def test_encoder_dims_mapping_sota_shape(self):
+        """Ensure dims mapping produces exactly one hidden layer (4096) and output 512."""
+        lit_module = HorizynLitModule(
+            query_encoder_dims=[2048, 4096, 512],
+            target_encoder_dims=[1024, 4096, 512],
+            embedding_dim=512,
+        )
+
+        # Extract Linear layers for query and target encoders
+        import torch.nn as nn
+
+        query_linears = [l for l in lit_module.model.query_encoder.main_nn if isinstance(l, nn.Linear)]
+        target_linears = [l for l in lit_module.model.target_encoder.main_nn if isinstance(l, nn.Linear)]
+
+        # Expect two Linear layers: input->4096 and 4096->512
+        assert len(query_linears) == 2
+        assert query_linears[0].in_features == 2048 and query_linears[0].out_features == 4096
+        assert query_linears[1].in_features == 4096 and query_linears[1].out_features == 512
+
+        assert len(target_linears) == 2
+        assert target_linears[0].in_features == 1024 and target_linears[0].out_features == 4096
+        assert target_linears[1].in_features == 4096 and target_linears[1].out_features == 512
+
+    def test_metrics_pos_neg_flags_enable(self):
+        """When pos_score/neg_score flags are enabled, metrics include them."""
+        lit_module = HorizynLitModule(
+            query_encoder_dims=[128, 256, 64],
+            target_encoder_dims=[256, 256, 64],
+            embedding_dim=64,
+            metric_ks=[1, 5],
+            pos_score=True,
+            neg_score=True,
+        )
+
+        metrics = lit_module.metric_functionals.keys()
+        assert "pos_score" in metrics
+        assert "neg_score" in metrics

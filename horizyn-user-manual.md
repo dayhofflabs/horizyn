@@ -35,16 +35,6 @@ Horizyn contains the code required to train the State-of-the-Art (SOTA) model fr
 - **Simplicity**: No extensibility abstractions or unused features
 - **Performance**: All data in memory for fast training
 
-### Recent Bug Fixes
-
-Three critical bugs were identified and fixed that significantly improve training quality and validation metrics:
-
-1. **Bidirectional Reactions**: Reactions are now trained in both forward and backward directions (doubled training data)
-2. **Full Screening Set**: Validation now uses ALL proteins from training AND validation sets (fixed ~68% coverage gap)
-3. **Correct Fingerprint Radius**: Morgan fingerprints now use radius=3 (ECFP6) instead of radius=2 (matches API/hatchery)
-
-These fixes are expected to improve top-1 hit rates from ~1% to 30-40% as reported in the paper.
-
 ---
 
 ## Architecture

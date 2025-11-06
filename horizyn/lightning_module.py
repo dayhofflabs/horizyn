@@ -64,24 +64,48 @@ class HorizynLitModule(pl.LightningModule):
         learning_rate: float = 1e-4,
         weight_decay: float = 0.01,
         metric_ks: List[int] = [1, 5, 10, 50],
+        pos_score: bool = False,
+        neg_score: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
 
-        # Build encoder kwargs from dims
+        # Validate and map encoder dims to MLP kwargs
+        if len(query_encoder_dims) < 2 or len(target_encoder_dims) < 2:
+            raise ValueError(
+                "Encoder dims must include at least [input_dim, output_dim]. "
+                f"Got query_encoder_dims={query_encoder_dims}, target_encoder_dims={target_encoder_dims}"
+            )
+        # Fail fast if the provided dims' output differs from embedding_dim
+        if query_encoder_dims[-1] != embedding_dim:
+            raise ValueError(
+                f"query_encoder_dims final element must equal embedding_dim. "
+                f"Got query_encoder_dims[-1]={query_encoder_dims[-1]} vs embedding_dim={embedding_dim}"
+            )
+        if target_encoder_dims[-1] != embedding_dim:
+            raise ValueError(
+                f"target_encoder_dims final element must equal embedding_dim. "
+                f"Got target_encoder_dims[-1]={target_encoder_dims[-1]} vs embedding_dim={embedding_dim}"
+            )
+
+        # Build encoder kwargs from dims: [in, h1, ..., hN, out]
+        # widths correspond to hidden layers only (exclude input and output dims)
+        query_hidden_widths = query_encoder_dims[1:-1]
+        target_hidden_widths = target_encoder_dims[1:-1]
+
         query_encoder_kwargs = {
             "input_dim": query_encoder_dims[0],
             "output_dim": embedding_dim,
-            "num_layers": len(query_encoder_dims) - 1,
-            "widths": query_encoder_dims[1:],
+            "num_layers": max(len(query_hidden_widths), 0),
+            "widths": query_hidden_widths if len(query_hidden_widths) > 0 else [],
             "normalise_output": True,
         }
 
         target_encoder_kwargs = {
             "input_dim": target_encoder_dims[0],
             "output_dim": embedding_dim,
-            "num_layers": len(target_encoder_dims) - 1,
-            "widths": target_encoder_dims[1:],
+            "num_layers": max(len(target_hidden_widths), 0),
+            "widths": target_hidden_widths if len(target_hidden_widths) > 0 else [],
             "normalise_output": True,
         }
 
@@ -102,7 +126,9 @@ class HorizynLitModule(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Metrics
-        self.metric_functionals = create_retrieval_metrics(top_k=metric_ks)
+        self.metric_functionals = create_retrieval_metrics(
+            top_k=metric_ks, include_mrr=True, pos_score=pos_score, neg_score=neg_score
+        )
 
         # Target lookup table for validation retrieval metrics
         self.target_lookup_table = None

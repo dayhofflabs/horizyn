@@ -2,7 +2,7 @@
 
 ## Summary
 
-Four critical bugs were discovered and fixed that explain why initial metrics were ~1% instead of the expected 30-40%:
+Six critical bugs were discovered and fixed that explain why initial metrics were ~1% instead of the expected 30-40%, and why observability/config alignment was incomplete:
 
 1. **Per-Pair Validation Metrics** ✅ **FIXED**
    - Bug: Treated 36,433 pairs as independent queries instead of 1,147 unique reactions
@@ -19,6 +19,14 @@ Four critical bugs were discovered and fixed that explain why initial metrics we
 4. **Wrong Fingerprint Radius** ✅ **FIXED**
    - Bug: Training code used `radius=2` instead of `radius=3` (API was correct)
    - Impact: Models incompatible with the API, degraded fingerprint quality
+
+5. **Encoder Dims Misinterpreted** ✅ **FIXED**
+   - Bug: Encoder dims (e.g., `[2048, 4096, 512]`) were passed as hidden widths including the final output dim, creating an unintended extra hidden layer (`512`) followed by a `512→512` output layer.
+   - Impact: Network capacity/depth diverged from SOTA/hatchery, potentially degrading metrics.
+
+6. **Metrics Flags Not Propagated** ✅ **FIXED**
+   - Bug: Config flags `training.metrics.pos_score` and `training.metrics.neg_score` were ignored when building validation metrics.
+   - Impact: Lost observability; positive/negative score diagnostics were not logged even when requested.
 
 All four bugs have been fixed. Expected top-1 hit rates: 30-40% (as reported in paper).
 
@@ -292,6 +300,87 @@ if self.mol_fp_type == "morgan":
 
 ---
 
+## Bug 4: Encoder Dims Misinterpreted (FIXED)
+
+### The Issue
+
+Encoder dims were intended to specify full layer dimensions `[input, hidden..., output]`, with the MLP internally adding an output layer to reach `output`. The previous implementation incorrectly interpreted `dims[1:]` as hidden widths, causing the final output dimension (e.g., `512`) to be treated as an extra hidden layer, followed by another `512→512` output layer.
+
+Example (wrong):
+- Input dims: `[2048, 4096, 512]`
+- Constructed layers: `2048→4096` (hidden), `4096→512` (hidden), then output `512→512`
+
+Correct behavior (SOTA/hatchery):
+- Hidden widths = `dims[1:-1]` (exclude input and output)
+- Output = `dims[-1]` which must equal `embedding_dim`
+- Constructed layers: `2048→4096` (hidden), output `4096→512`
+
+### Impact
+- Mismatch to SOTA architecture changed model capacity/depth, risking degraded retrieval metrics and apples-to-oranges comparisons vs hatchery.
+
+### The Fix
+- In `HorizynLitModule.__init__`:
+  - Validate `dims[-1] == embedding_dim` (fail fast).
+  - Set hidden widths to `dims[1:-1]` and `num_layers = len(dims) - 2`.
+  - Keep `output_dim = embedding_dim`.
+
+Code reference:
+```12:48:/workspaces/dma/horizyn/horizyn/lightning_module.py
+        if query_encoder_dims[-1] != embedding_dim:
+            raise ValueError(...)
+        if target_encoder_dims[-1] != embedding_dim:
+            raise ValueError(...)
+        query_hidden_widths = query_encoder_dims[1:-1]
+        target_hidden_widths = target_encoder_dims[1:-1]
+        query_encoder_kwargs = {
+            "input_dim": query_encoder_dims[0],
+            "output_dim": embedding_dim,
+            "num_layers": max(len(query_hidden_widths), 0),
+            "widths": query_hidden_widths if len(query_hidden_widths) > 0 else [],
+            "normalise_output": True,
+        }
+```
+
+### Verification
+- [x] Unit test ensures exactly two Linear layers for SOTA dims: `2048→4096` and `4096→512`, no `512→512` layer.
+- [x] Works for target encoder dims (`1024→4096→512`) as well.
+
+---
+
+## Bug 5: Metrics Flags Not Propagated (FIXED)
+
+### The Issue
+`training.metrics.pos_score` and `training.metrics.neg_score` were present in the config but were not forwarded to the metrics factory, so these diagnostics were never logged.
+
+### Impact
+- No impact on training correctness, but reduced observability for score distributions and debugging.
+
+### The Fix
+- Threaded flags through the entrypoint and Lightning module:
+  - `train.py` passes `pos_score` and `neg_score` from config to `HorizynLitModule`.
+  - `HorizynLitModule` forwards flags into `create_retrieval_metrics`.
+
+Code references:
+```148:160:/workspaces/dma/horizyn/train.py
+    model = HorizynLitModule(
+        ...
+        metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
+        pos_score=config.training.metrics.get("pos_score", False),
+        neg_score=config.training.metrics.get("neg_score", False),
+    )
+```
+
+```104:110:/workspaces/dma/horizyn/horizyn/lightning_module.py
+        self.metric_functionals = create_retrieval_metrics(
+            top_k=metric_ks, include_mrr=True, pos_score=pos_score, neg_score=neg_score
+        )
+```
+
+### Verification
+- [x] Unit test verifies that enabling flags includes `pos_score` and `neg_score` in `metric_functionals`.
+
+---
+
 ## Current Configuration Summary
 
 All bugs have been fixed. The current SOTA configuration is:
@@ -310,7 +399,9 @@ All bugs have been fixed. The current SOTA configuration is:
 
 ### Model
 - **Query encoder**: [2048, 4096, 512] MLP with ReLU, L2-normalized output
+  - Interpreted as one hidden layer (4096) and output 512 (no extra 512 hidden)
 - **Target encoder**: [1024, 4096, 512] MLP with ReLU, L2-normalized output
+  - Interpreted as one hidden layer (4096) and output 512
 - **Optimizer**: AdamW (lr=1e-4, weight_decay=0.01)
 - **Loss**: MLNCE (beta=10.0, fixed)
 
@@ -337,11 +428,12 @@ These metrics correctly measure: "For what fraction of reactions does the model 
 ## Files Modified
 
 1. `horizyn/data_module.py` - Bidirectional augmentation, full screening set, query grouping
-2. `horizyn/lightning_module.py` - Multi-label retrieval metrics
+2. `horizyn/lightning_module.py` - Multi-label retrieval metrics; encoder dims mapping; metrics flags
 3. `horizyn/datasets/fingerprints/rdkit_plus.py` - Morgan radius=3
 4. `horizyn/configs/sota.yaml` - Updated documentation
-5. `horizyn/tests/*` - Tests for all fixes
+5. `horizyn/tests/*` - Tests for all fixes (including dims mapping and metrics flags)
 6. `horizyn/horizyn-user-manual.md` - Updated documentation
+7. `horizyn/train.py` - Propagate metrics flags to module
 
 ---
 
