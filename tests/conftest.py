@@ -12,7 +12,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "e2e: mark test as an end-to-end test requiring full SwissProt data (slow, skipped by default)",
+        "slow: mark test as slow (5+ minutes, skipped by default with -m 'not slow')",
     )
 
 

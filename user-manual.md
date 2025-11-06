@@ -349,12 +349,13 @@ dataset = SQLDataset(
 
 **EmbedDataset**: Loads embeddings from HDF5 files
 
+HDF5 files must contain two datasets: `ids` (string identifiers) and `vectors` (embedding matrix).
+
 ```python
 dataset = EmbedDataset(
-    h5_path="proteins.h5",
-    data_column="embeddings",
-    id_column="ids",
-    in_memory=True  # Load all embeddings into RAM
+    file_path="data/swissprot/proteins_t5_embeddings.h5",
+    in_memory=True,  # Load all embeddings into RAM
+    dtype=torch.float32
 )
 ```
 

@@ -52,15 +52,15 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
-    "e2e: End-to-end tests with full SwissProt data (deselected by default)",
-    "integration: Integration tests with nanodata",
+    "slow: Slow tests (5+ minutes, deselected by default)",
+    "integration: Integration tests",
 ]
 addopts = [
     "-v",
     "--strict-markers",
     "--cov=horizyn",
     "--cov-report=term-missing",
-    "-m", "not e2e",  # Skip e2e tests by default
+    "-m", "not slow",  # Skip slow tests by default
 ]
 
 [tool.black]

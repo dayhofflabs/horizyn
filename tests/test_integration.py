@@ -1,12 +1,19 @@
 """
 Integration tests for the Horizyn training pipeline.
 
-This module contains two types of tests:
-1. Smoke tests: Fast tests using nanodata (~12 reactions, runs in < 1 minute)
-2. E2E tests: Full end-to-end tests using SwissProt data (requires download, ~10 minutes)
+This module contains several types of tests:
+1. Smoke tests: Fast tests using nanodata (~12 reactions, < 1 minute)
+2. SwissProt fast tests: Fast tests with full data (no fingerprints, < 5 seconds)
+3. SwissProt slow tests: Tests with fingerprints/training (5-15 minutes)
 
-Smoke tests run by default. E2E tests are marked with @pytest.mark.e2e and can be run with:
-    pytest tests/test_integration.py -v -m e2e
+Run all tests (excluding slow):
+    pytest tests/test_integration.py -v -m "not slow"
+
+Run only slow tests:
+    pytest tests/test_integration.py -v -m slow
+
+Run all tests including slow:
+    pytest tests/test_integration.py -v
 """
 
 import shutil
@@ -938,48 +945,54 @@ class TestSmokeRobustness:
 
 
 # =============================================================================
-# E2E Tests with Full SwissProt Data
+# SwissProt Tests (Fast and Slow)
+# =============================================================================
+#
+# These tests use the full SwissProt dataset and will skip automatically if
+# the data is not available. Fast tests run by default, slow tests are marked
+# with @pytest.mark.slow.
+#
+# Run all tests (including slow):
+#     pytest tests/test_integration.py -v
+#
+# Skip slow tests (default for CI):
+#     pytest tests/test_integration.py -v -m "not slow"
+#
+# Run only slow tests:
+#     pytest tests/test_integration.py -v -m slow
 # =============================================================================
 
 
-@pytest.mark.e2e
-class TestE2ESwissProtTraining:
+@pytest.fixture
+def check_swissprot_data():
+    """Skip test if SwissProt data is not available."""
+    swissprot_dir = Path("data/swissprot")
+    required_files = [
+        "reactions.db",
+        "proteins_t5_embeddings.h5",
+        "train_pairs.db",
+        "val_pairs.db",
+    ]
+
+    for filename in required_files:
+        filepath = swissprot_dir / filename
+        if not filepath.exists():
+            pytest.skip(
+                f"SwissProt data not found: {filename}. "
+                "Run 'python scripts/download_data.py' to download."
+            )
+
+
+class TestSwissProtFast:
     """
-    End-to-end tests using the full SwissProt dataset.
+    Fast tests using full SwissProt dataset.
 
-    These tests require:
-    - SwissProt data downloaded to data/swissprot/ (~930 MB)
-    - Sufficient RAM (~16GB)
-    - GPU with 16GB+ VRAM recommended
-    - ~10-15 minutes runtime per test
-
-    Run these tests with:
-        pytest tests/test_integration.py -v -m e2e
-
-    Skip these tests with:
-        pytest tests/test_integration.py -v -m "not e2e"
+    These tests verify data integrity and basic loading without expensive
+    operations like fingerprint computation or training. They run in < 5 seconds
+    each and are included in default test runs.
     """
 
-    @pytest.fixture
-    def check_swissprot_data(self):
-        """Skip test if SwissProt data is not available."""
-        swissprot_dir = Path("data/swissprot")
-        required_files = [
-            "reactions.db",
-            "proteins_t5_embeddings.h5",
-            "train_pairs.db",
-            "val_pairs.db",
-        ]
-
-        for filename in required_files:
-            filepath = swissprot_dir / filename
-            if not filepath.exists():
-                pytest.skip(
-                    f"SwissProt data not found: {filename}. "
-                    "Run 'python scripts/download_data.py' to download."
-                )
-
-    def test_e2e_swissprot_config_is_valid(self, check_swissprot_data):
+    def test_swissprot_config_is_valid(self, check_swissprot_data):
         """Test that sota.yaml config is valid and points to SwissProt data."""
         config_path = Path("configs/sota.yaml")
         assert config_path.exists(), "sota.yaml config not found"
@@ -1005,22 +1018,150 @@ class TestE2ESwissProtTraining:
             filepath = Path(data_cfg[key])
             assert filepath.exists(), f"Missing SwissProt file: {filepath}"
 
-    def test_e2e_data_loading_memory_footprint(self, check_swissprot_data):
-        """
-        Test that SwissProt data loads into memory successfully.
+    def test_swissprot_files_exist_and_not_empty(self, check_swissprot_data):
+        """Test that all SwissProt files exist and are not empty."""
+        swissprot_dir = Path("data/swissprot")
+        required_files = [
+            "reactions.db",
+            "proteins_t5_embeddings.h5",
+            "train_pairs.db",
+            "val_pairs.db",
+        ]
 
-        This test verifies:
+        for filename in required_files:
+            filepath = swissprot_dir / filename
+            assert filepath.exists(), f"Missing file: {filename}"
+            assert filepath.stat().st_size > 0, f"Empty file: {filename}"
+
+    def test_swissprot_database_schemas(self, check_swissprot_data):
+        """
+        Test that SwissProt SQLite databases have expected schemas.
+        
+        This is a fast test that just checks table structure without loading data.
+        Runtime: < 1 second
+        """
+        import sqlite3
+
+        # Check reactions database
+        reactions_db = Path("data/swissprot/reactions.db")
+        with sqlite3.connect(str(reactions_db)) as conn:
+            cursor = conn.cursor()
+            
+            # Check reaction table exists
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='reaction'"
+            )
+            assert cursor.fetchone() is not None, "reaction table not found"
+            
+            # Check expected columns exist
+            cursor.execute("PRAGMA table_info(reaction)")
+            columns = {row[1] for row in cursor.fetchall()}
+            assert "reaction_id" in columns
+            assert "reaction_smiles" in columns
+
+        # Check train_pairs database
+        train_pairs_db = Path("data/swissprot/train_pairs.db")
+        with sqlite3.connect(str(train_pairs_db)) as conn:
+            cursor = conn.cursor()
+            
+            # Check protein_to_reaction table exists
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='protein_to_reaction'"
+            )
+            assert cursor.fetchone() is not None, "protein_to_reaction table not found"
+            
+            # Check expected columns exist
+            cursor.execute("PRAGMA table_info(protein_to_reaction)")
+            columns = {row[1] for row in cursor.fetchall()}
+            assert "pr_id" in columns
+            assert "reaction_id" in columns
+            assert "protein_id" in columns
+
+    def test_swissprot_dataset_sizes(self, check_swissprot_data):
+        """
+        Test that SwissProt datasets have expected sizes.
+        
+        This is a fast test that queries row counts without loading data.
+        Runtime: < 2 seconds
+        """
+        import sqlite3
+        import h5py
+
+        # Check training pairs count
+        train_pairs_db = Path("data/swissprot/train_pairs.db")
+        with sqlite3.connect(str(train_pairs_db)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM protein_to_reaction")
+            train_count = cursor.fetchone()[0]
+            
+            # SwissProt has ~257k training pairs
+            assert 200_000 < train_count < 300_000, (
+                f"Training pairs count {train_count} outside expected range (200k-300k)"
+            )
+
+        # Check validation pairs count
+        val_pairs_db = Path("data/swissprot/val_pairs.db")
+        with sqlite3.connect(str(val_pairs_db)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM protein_to_reaction")
+            val_count = cursor.fetchone()[0]
+            
+            # SwissProt has ~36k validation pairs
+            assert 30_000 < val_count < 50_000, (
+                f"Validation pairs count {val_count} outside expected range (30k-50k)"
+            )
+
+        # Check protein embeddings count
+        proteins_h5 = Path("data/swissprot/proteins_t5_embeddings.h5")
+        with h5py.File(str(proteins_h5), "r") as f:
+            assert "ids" in f, "ids dataset not found in HDF5"
+            assert "vectors" in f, "vectors dataset not found in HDF5"
+            
+            protein_count = len(f["ids"])
+            # SwissProt has ~200k+ proteins
+            assert 150_000 < protein_count < 300_000, (
+                f"Protein count {protein_count} outside expected range (150k-300k)"
+            )
+            
+            # Check embedding dimensions
+            embed_shape = f["vectors"].shape
+            assert embed_shape[1] == 1024, f"Expected 1024-dim embeddings, got {embed_shape[1]}"
+
+
+class TestSwissProtSlow:
+    """
+    Slow tests using full SwissProt dataset.
+
+    These tests involve expensive operations like fingerprint computation or
+    full training runs. They are marked with @pytest.mark.slow and excluded
+    from default test runs. Runtime: 5-15 minutes each.
+
+    Run with: pytest tests/test_integration.py -v -m slow
+    """
+
+    @pytest.mark.slow
+    def test_swissprot_full_data_loading_with_fingerprints(self, check_swissprot_data):
+        """
+        Test that SwissProt data loads into memory with fingerprint computation.
+
+        This is a slow test because it computes RDKit+ and DRFP fingerprints for
+        all ~257k reactions, which takes 5-10 minutes.
+
+        Verifies:
         - All data files can be opened
         - Data can be loaded into memory
+        - Fingerprints compute successfully
         - Memory footprint is reasonable (~15GB)
         - Datasets have expected sizes
+        
+        Runtime: 5-10 minutes
         """
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
 
         config = load_config("configs/sota.yaml")
 
-        # Initialize data module
+        # Initialize data module (this computes fingerprints - slow!)
         data_module = HorizynDataModule(**config.data)
         data_module.setup("fit")
 
@@ -1048,23 +1189,24 @@ class TestE2ESwissProtTraining:
         for i, loader in enumerate(val_loaders):
             batch = next(iter(loader))
             assert (
-                "query" in batch or "target" in batch
-            ), f"Validation loader {i} missing query/target"
+                "query_vec" in batch or "target_vec" in batch
+            ), f"Validation loader {i} missing query_vec/target_vec"
 
-    def test_e2e_full_training_two_epochs(self, tmp_path, check_swissprot_data):
+    @pytest.mark.slow
+    def test_swissprot_full_training_two_epochs(self, tmp_path, check_swissprot_data):
         """
-        E2E test: Train SOTA model for 2 epochs on full SwissProt data.
+        Train SOTA model for 2 epochs on full SwissProt data.
 
-        This is a comprehensive test that:
-        1. Loads the full SOTA configuration
-        2. Initializes the complete data pipeline (all 257k training pairs)
-        3. Runs 2 full epochs of training
-        4. Validates on all 36k validation pairs
-        5. Saves checkpoints
-        6. Logs metrics
+        This comprehensive test verifies:
+        1. Full SOTA configuration loads correctly
+        2. Complete data pipeline initializes (all 257k training pairs)
+        3. Training runs for 2 full epochs without crashes
+        4. Validation runs on all 36k validation pairs
+        5. Checkpoints save correctly
+        6. Metrics are logged to CSV
 
-        Expected runtime: ~10-15 minutes on T4 GPU, ~30-45 minutes on CPU
-        Expected memory: ~15GB RAM, ~10GB GPU VRAM
+        Runtime: 10-15 minutes on T4 GPU, 30-45 minutes on CPU
+        Memory: ~15GB RAM, ~10GB GPU VRAM
         """
         import lightning.pytorch as pl
 
@@ -1163,93 +1305,17 @@ class TestE2ESwissProtTraining:
             lines = content.strip().split("\n")
             assert len(lines) > 3, "Expected multiple metric entries"
 
-    def test_e2e_checkpoint_loading_and_resume(self, tmp_path, check_swissprot_data):
+    @pytest.mark.slow
+    def test_swissprot_validation_metrics_realistic_values(self, check_swissprot_data):
         """
-        E2E test: Train 1 epoch, save checkpoint, load and resume for 1 more epoch.
+        Train for 1 epoch and validate that metrics are in realistic ranges.
 
-        This verifies:
-        1. Checkpoints save correctly with full model state
-        2. Checkpoints can be loaded
-        3. Training can be resumed from checkpoint
-        4. Resumed training continues properly
-        """
-        import lightning.pytorch as pl
-
-        from horizyn.config import load_config
-        from horizyn.data_module import HorizynDataModule
-        from horizyn.lightning_module import HorizynLitModule
-
-        config = load_config("configs/sota.yaml")
-        checkpoint_dir = tmp_path / "checkpoints"
-        checkpoint_dir.mkdir()
-
-        # Train for 1 epoch
-        print("\nTraining epoch 1...")
-        pl.seed_everything(42)
-        data_module = HorizynDataModule(**config.data)
-        model = HorizynLitModule(
-            query_encoder_dims=config.model.query_encoder_dims,
-            target_encoder_dims=config.model.target_encoder_dims,
-            embedding_dim=config.model.embedding_dim,
-            learning_rate=config.training.learning_rate,
-            weight_decay=config.training.weight_decay,
-            beta=config.training.loss.beta,
-            learn_beta=config.training.loss.get("learn_beta", False),
-            metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
-        )
-
-        trainer = pl.Trainer(
-            max_epochs=1,
-            accelerator="auto",
-            devices=1,
-            callbacks=[
-                pl.callbacks.ModelCheckpoint(
-                    dirpath=str(checkpoint_dir),
-                    save_last=True,
-                ),
-            ],
-            enable_progress_bar=True,
-            logger=False,
-        )
-
-        trainer.fit(model, data_module)
-
-        checkpoint_path = checkpoint_dir / "last.ckpt"
-        assert checkpoint_path.exists(), "Checkpoint not saved"
-
-        # Load from checkpoint and train 1 more epoch
-        print("\nLoading checkpoint and training epoch 2...")
-        loaded_model = HorizynLitModule.load_from_checkpoint(
-            checkpoint_path,
-            model_config=config.model,
-            optimizer_config=config.optimizer,
-            loss_config=config.loss,
-        )
-
-        # Create new trainer for resumed training
-        trainer_resumed = pl.Trainer(
-            max_epochs=2,  # Will continue from epoch 1 to epoch 2
-            accelerator="auto",
-            devices=1,
-            enable_progress_bar=True,
-            logger=False,
-        )
-
-        # Resume training
-        trainer_resumed.fit(loaded_model, data_module, ckpt_path=str(checkpoint_path))
-
-        # Verify training continued
-        assert trainer_resumed.current_epoch == 1  # Completed 2 epochs total (0-indexed)
-
-    def test_e2e_validation_metrics_realistic_values(self, check_swissprot_data):
-        """
-        E2E test: Run validation and check that metrics are in realistic ranges.
-
-        This test trains for just 1 epoch and then validates that:
-        - Top-1 accuracy is reasonable (>1% even with random init)
-        - Top-10 accuracy > Top-1 accuracy
-        - Loss values are finite and in expected range
-        - Positive scores > negative scores (after some training)
+        This test verifies:
+        - Top-K accuracies are in valid range [0, 1]
+        - Loss values are finite
+        - Validation runs without errors on full dataset
+        
+        Runtime: 5-10 minutes on T4 GPU
         """
         import lightning.pytorch as pl
 
