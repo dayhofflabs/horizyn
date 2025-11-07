@@ -132,10 +132,11 @@ class TestSmokeTrainingDynamics:
             metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
         )
 
-        # Save initial parameters
+        # Save initial parameters (only trainable ones)
         initial_params = {}
         for name, param in model.named_parameters():
-            initial_params[name] = param.detach().cpu().clone()
+            if param.requires_grad:
+                initial_params[name] = param.detach().cpu().clone()
 
         trainer = pl.Trainer(
             max_epochs=1,
@@ -150,11 +151,14 @@ class TestSmokeTrainingDynamics:
 
         trainer.fit(model, data_module)
 
-        # Compare with final parameters
+        # Compare with final parameters (only trainable ones)
         parameters_changed = 0
         parameters_unchanged = 0
 
         for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
+
             final_param = param.detach().cpu()
             initial_param = initial_params[name]
 
@@ -163,13 +167,13 @@ class TestSmokeTrainingDynamics:
             else:
                 parameters_unchanged += 1
 
-        # At least 90% of parameters should have changed
+        # At least 90% of trainable parameters should have changed
         total_params = parameters_changed + parameters_unchanged
         change_rate = parameters_changed / total_params
 
         assert (
             change_rate > 0.9
-        ), f"Only {parameters_changed}/{total_params} parameters changed ({change_rate:.1%})"
+        ), f"Only {parameters_changed}/{total_params} trainable parameters changed ({change_rate:.1%})"
 
     def test_embeddings_are_normalized_and_correct_dim(self):
         """

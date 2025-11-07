@@ -97,6 +97,7 @@ class TestHorizynLitModule:
         lit_module = HorizynLitModule(
             query_encoder_dims=[64, 128],
             target_encoder_dims=[64, 128],
+            embedding_dim=128,
         )
 
         vecs = torch.randn(5, 64)
@@ -167,6 +168,7 @@ class TestHorizynLitModule:
         lit_module = HorizynLitModule(
             query_encoder_dims=[64, 128],
             target_encoder_dims=[64, 128],
+            embedding_dim=128,
             learning_rate=1e-3,
             weight_decay=0.05,
         )
@@ -424,6 +426,7 @@ class TestHorizynLitModule:
         lit_module = HorizynLitModule(
             query_encoder_dims=[64, 128],
             target_encoder_dims=[64, 128],
+            embedding_dim=128,
         )
 
         # Move to CPU
