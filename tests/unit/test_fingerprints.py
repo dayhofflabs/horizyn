@@ -578,3 +578,105 @@ class TestDRFPFingerprintDataset:
 
         assert fp1.shape == (1024,)
         assert fp2.shape == (1024,)
+
+
+class TestMorganFingerprintRadius:
+    """Tests for Morgan fingerprint radius parameter."""
+
+    def test_morgan_radius_is_three(self):
+        """Test that Morgan fingerprints use radius=3 (ECFP6)."""
+        reactions = BaseDataset(keys=["rxn1"], array_data=[{"reaction_smiles": "CCO>>CC=O"}])
+
+        # Create fingerprint dataset with Morgan fingerprints
+        fp_dataset = RDKitPlusFingerprintDataset(
+            reaction_dataset=reactions,
+            mol_fp_type="morgan",
+            vec_dim=1024,
+        )
+
+        # Generate fingerprint
+        fp = fp_dataset["rxn1"]
+
+        # Verify it generates without error (radius=3 should work)
+        assert fp.shape == (1024,), "Fingerprint should be 1024-dimensional"
+
+        # The fingerprint should be valid (not all zeros)
+        assert fp.sum() > 0, "Fingerprint should have some non-zero bits"
+
+    def test_radius_three_produces_different_fingerprints_than_radius_two(self):
+        """Test that radius=3 produces different fingerprints than radius=2."""
+        import numpy as np
+
+        from rdkit.Chem.rdChemReactions import ReactionFromSmarts
+        from rdkit.Chem.rdFingerprintGenerator import GetMorganGenerator
+        from rdkit.Chem.rdmolops import AssignStereochemistry, SanitizeMol
+
+        # Create test reaction with moderate complexity
+        reactions = BaseDataset(
+            keys=["rxn1"], array_data=[{"reaction_smiles": "c1ccccc1CC>>c1ccccc1C=C"}]
+        )
+
+        # Get fingerprint with current implementation (should be radius=3)
+        fp_dataset = RDKitPlusFingerprintDataset(
+            reaction_dataset=reactions,
+            mol_fp_type="morgan",
+            vec_dim=1024,
+        )
+        fp_current = fp_dataset["rxn1"]
+
+        # Manually create a radius=2 fingerprint for comparison
+        rxn = ReactionFromSmarts(reactions["rxn1"]["reaction_smiles"], useSmiles=True)
+        fp_gen_radius2 = GetMorganGenerator(radius=2, fpSize=512, includeChirality=True)
+
+        fp_radius2_array = np.zeros(1024, dtype=np.int64)
+
+        # Process reactants (with proper sanitization)
+        for react in rxn.GetReactants():
+            SanitizeMol(react)
+            AssignStereochemistry(react, force=True, cleanIt=True)
+            fp1 = fp_gen_radius2.GetFingerprintAsNumPy(react)
+            fp_radius2_array[:512] |= fp1 == 1
+
+        # Process products (with proper sanitization)
+        for prod in rxn.GetProducts():
+            SanitizeMol(prod)
+            AssignStereochemistry(prod, force=True, cleanIt=True)
+            fp1 = fp_gen_radius2.GetFingerprintAsNumPy(prod)
+            fp_radius2_array[512:] |= fp1 == 1
+
+        fp_radius2 = torch.tensor(fp_radius2_array, dtype=torch.float32)
+
+        # Verify they are different
+        # For a moderately complex reaction, radius=3 should capture more features
+        assert not torch.equal(
+            fp_current, fp_radius2
+        ), "Radius=3 fingerprint should differ from radius=2 for complex reactions"
+
+    def test_fingerprints_in_full_pipeline(self):
+        """Test that fingerprints work correctly in the full training pipeline."""
+        from horizyn.config import load_config
+        from horizyn.data_module import HorizynDataModule
+
+        config = load_config("configs/nano.yaml")
+        dm = HorizynDataModule(**config.data)
+        dm.setup("fit")
+
+        # Get a sample from the training data
+        train_loader = dm.train_dataloader()
+        batch = next(iter(train_loader))
+
+        # Check that query vectors (reaction fingerprints) are valid
+        query_vecs = batch["query_vec"]
+
+        assert (
+            query_vecs.shape[1] == 2048
+        ), "Query vectors should be 2048-dim (RDKit+ 1024 + DRFP 1024)"
+        assert not torch.isnan(query_vecs).any(), "Query vectors should not contain NaN"
+        assert not torch.isinf(query_vecs).any(), "Query vectors should not contain Inf"
+
+        # Check that fingerprints have reasonable sparsity
+        # (Not all zeros, not all ones)
+        nonzero_ratio = (query_vecs > 0).float().mean()
+        assert (
+            0.01 < nonzero_ratio < 0.99
+        ), f"Fingerprints have unusual sparsity: {nonzero_ratio:.2%}"

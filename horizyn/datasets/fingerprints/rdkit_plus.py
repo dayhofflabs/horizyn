@@ -147,7 +147,7 @@ class RDKitPlusFingerprintDataset(BaseFingerprintDataset):
         if self.mol_fp_type == "morgan":
             # Morgan fingerprints (ECFP-like)
             self._fp_gen = generator_func(
-                radius=2,  # ECFP4 (radius 2 = diameter 4)
+                radius=3,  # ECFP6 (radius 3 = diameter 6) - matches API/hatchery
                 fpSize=self.fp_size,
                 includeChirality=self.use_chirality,
             )

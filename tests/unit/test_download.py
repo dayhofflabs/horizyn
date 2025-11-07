@@ -40,7 +40,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -55,7 +55,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -87,7 +87,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -114,7 +114,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -141,7 +141,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -166,7 +166,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -189,7 +189,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -230,7 +230,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:
@@ -250,7 +250,7 @@ class TestDownloadScript:
         import sys
         from pathlib import Path
 
-        scripts_dir = Path("scripts")
+        scripts_dir = Path("scripts").resolve()
         sys.path.insert(0, str(scripts_dir))
 
         try:

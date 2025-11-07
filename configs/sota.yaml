@@ -25,7 +25,7 @@ data:
   retrieval_batch_size: 128    # Retrieval validation batch size
 
   # Data loading
-  num_workers: 0               # Number of dataloader workers (0 for single process)
+  num_workers: 8               # Number of dataloader workers (0 for single process)
   pin_memory: false            # Pin memory for GPU transfer
 
   # Reaction fingerprints (RDKit+ and DRFP)
@@ -35,6 +35,8 @@ data:
   # Reaction standardization
   standardize_reactions: true
   standardize_hypervalent: true
+  standardize_remove_hs: true
+  standardize_kekulize: false
   standardize_uncharge: true
   standardize_metals: true
 

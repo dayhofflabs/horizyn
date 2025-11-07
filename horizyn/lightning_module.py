@@ -64,24 +64,48 @@ class HorizynLitModule(pl.LightningModule):
         learning_rate: float = 1e-4,
         weight_decay: float = 0.01,
         metric_ks: List[int] = [1, 5, 10, 50],
+        pos_score: bool = False,
+        neg_score: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
 
-        # Build encoder kwargs from dims
+        # Validate and map encoder dims to MLP kwargs
+        if len(query_encoder_dims) < 2 or len(target_encoder_dims) < 2:
+            raise ValueError(
+                "Encoder dims must include at least [input_dim, output_dim]. "
+                f"Got query_encoder_dims={query_encoder_dims}, target_encoder_dims={target_encoder_dims}"
+            )
+        # Fail fast if the provided dims' output differs from embedding_dim
+        if query_encoder_dims[-1] != embedding_dim:
+            raise ValueError(
+                f"query_encoder_dims final element must equal embedding_dim. "
+                f"Got query_encoder_dims[-1]={query_encoder_dims[-1]} vs embedding_dim={embedding_dim}"
+            )
+        if target_encoder_dims[-1] != embedding_dim:
+            raise ValueError(
+                f"target_encoder_dims final element must equal embedding_dim. "
+                f"Got target_encoder_dims[-1]={target_encoder_dims[-1]} vs embedding_dim={embedding_dim}"
+            )
+
+        # Build encoder kwargs from dims: [in, h1, ..., hN, out]
+        # widths correspond to hidden layers only (exclude input and output dims)
+        query_hidden_widths = query_encoder_dims[1:-1]
+        target_hidden_widths = target_encoder_dims[1:-1]
+
         query_encoder_kwargs = {
             "input_dim": query_encoder_dims[0],
             "output_dim": embedding_dim,
-            "num_layers": len(query_encoder_dims) - 1,
-            "widths": query_encoder_dims[1:],
+            "num_layers": max(len(query_hidden_widths), 0),
+            "widths": query_hidden_widths if len(query_hidden_widths) > 0 else [],
             "normalise_output": True,
         }
 
         target_encoder_kwargs = {
             "input_dim": target_encoder_dims[0],
             "output_dim": embedding_dim,
-            "num_layers": len(target_encoder_dims) - 1,
-            "widths": target_encoder_dims[1:],
+            "num_layers": max(len(target_hidden_widths), 0),
+            "widths": target_hidden_widths if len(target_hidden_widths) > 0 else [],
             "normalise_output": True,
         }
 
@@ -102,7 +126,9 @@ class HorizynLitModule(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Metrics
-        self.metric_functionals = create_retrieval_metrics(top_k=metric_ks)
+        self.metric_functionals = create_retrieval_metrics(
+            top_k=metric_ks, include_mrr=True, pos_score=pos_score, neg_score=neg_score
+        )
 
         # Target lookup table for validation retrieval metrics
         self.target_lookup_table = None
@@ -238,8 +264,9 @@ class HorizynLitModule(pl.LightningModule):
         # Get datamodule to determine number of targets
         datamodule = self.trainer.datamodule
 
-        # Preallocate target lookup table
-        self.num_targets = len(datamodule._target_data)
+        # Preallocate target lookup table using FULL screening set (train + val proteins)
+        # CRITICAL: Must use _screening_target_data, not _target_data
+        self.num_targets = len(datamodule._screening_target_data)
         vec_dim = self.model.target_encoder.output_dim
 
         self.target_lookup_table = torch.zeros(
@@ -248,7 +275,7 @@ class HorizynLitModule(pl.LightningModule):
 
         # Create mapping from target IDs to lookup table indices
         self.target_id_to_idx = {
-            target_id: idx for idx, target_id in enumerate(datamodule._target_data.keys)
+            target_id: idx for idx, target_id in enumerate(datamodule._screening_target_data.keys)
         }
 
     def _update_target_lookup_table(self, batch: Dict[str, Any], target_embeds: torch.Tensor):
@@ -372,14 +399,17 @@ class HorizynLitModule(pl.LightningModule):
                    target_vec and target_lookup_row_idx.
             batch_idx: Index of the batch.
         """
+        # Get datamodule for batch size info
+        datamodule = self.trainer.datamodule
+
         # Handle both tensor and dict inputs
         if isinstance(batch, torch.Tensor):
             # Batch is just the target vectors from EmbedDataset
             target_vecs = batch
             # Compute row indices based on batch_idx and batch_size
             batch_size = target_vecs.shape[0]
-            dataloader = self.trainer.val_dataloaders[1]
-            start_idx = batch_idx * dataloader.batch_size
+            # Use train_batch_size since val loader 1 uses that
+            start_idx = batch_idx * datamodule.train_batch_size
             row_indices = torch.arange(start_idx, start_idx + batch_size, dtype=torch.long)
             # Create a dict for _update_target_lookup_table
             batch_dict = {"target_lookup_row_idx": row_indices}
@@ -401,12 +431,17 @@ class HorizynLitModule(pl.LightningModule):
         """
         Compute retrieval metrics using the target lookup table.
 
+        Each query can have multiple valid targets (multi-label retrieval).
+        Metrics check if ANY valid target appears in top-K.
+
         Args:
-            batch: Batch dict containing query_vec, target_id, and pair_id.
+            batch: Batch dict containing:
+                - query_vec: Query vectors (batch_size, query_dim)
+                - query_id: List of query IDs (used to get target lists)
             batch_idx: Index of the batch.
         """
         query_vecs = batch["query_vec"]
-        target_ids = batch["target_id"]
+        query_ids = batch["query_id"]
 
         # Encode queries
         query_embeds = self.model.query_encoder(query_vecs)
@@ -417,45 +452,53 @@ class HorizynLitModule(pl.LightningModule):
         # Convert distances to scores (higher is better)
         scores = -dists
 
+        # Get datamodule to access target lists
+        datamodule = self.trainer.datamodule
+
         # Compute metrics for each query
         batch_size = query_embeds.shape[0]
 
         for metric_name, metric_func in self.metric_functionals.items():
             metric_values = []
             for idx in range(batch_size):
-                # Get target ID and convert to lookup table index
-                target_id = target_ids[idx]
+                # Get query ID and its list of valid target IDs
+                query_id = query_ids[idx]
 
-                # Convert string ID to integer index in lookup table
-                if isinstance(target_id, str):
-                    target_idx = self.target_id_to_idx[target_id]
-                    target_idx = torch.tensor([target_idx], device=self.device)
-                elif isinstance(target_id, torch.Tensor):
-                    # If already a tensor, ensure it's 1D
-                    if target_id.dim() == 0:
-                        target_idx = target_id.unsqueeze(0)
-                    else:
-                        target_idx = target_id
-                else:
-                    # Assume it's already an integer index
-                    target_idx = torch.tensor([target_id], device=self.device)
+                # Get all valid target IDs for this query from the retrieval dataset
+                valid_target_ids = datamodule._val_retrieval_targets[query_id]
 
-                # Compute metric
-                metric_value = metric_func(scores[idx], target_idx)
+                # Convert target IDs to lookup table indices
+                target_indices = []
+                for target_id in valid_target_ids:
+                    if target_id in self.target_id_to_idx:
+                        target_indices.append(self.target_id_to_idx[target_id])
+
+                # Create tensor of target indices (padded with -1 for metric functions)
+                if len(target_indices) == 0:
+                    # No valid targets found - skip this query
+                    continue
+
+                target_idx_tensor = torch.tensor(
+                    target_indices, dtype=torch.long, device=self.device
+                )
+
+                # Compute metric (metrics handle multiple targets via torch.isin)
+                metric_value = metric_func(scores[idx], target_idx_tensor)
                 metric_values.append(metric_value)
 
             # Log mean metric
-            metric_tensor = torch.stack(metric_values)
-            self.log(
-                f"val/{metric_name}",
-                metric_tensor.mean(),
-                on_epoch=True,
-                on_step=False,
-                prog_bar=(metric_name == "top_1_hit_rate"),  # Show Top-1 in progress bar
-                add_dataloader_idx=False,
-                batch_size=batch_size,
-                sync_dist=True,
-            )
+            if len(metric_values) > 0:
+                metric_tensor = torch.stack(metric_values)
+                self.log(
+                    f"val/{metric_name}",
+                    metric_tensor.mean(),
+                    on_epoch=True,
+                    on_step=False,
+                    prog_bar=(metric_name == "top_1_hit_rate"),  # Show Top-1 in progress bar
+                    add_dataloader_idx=False,
+                    batch_size=batch_size,
+                    sync_dist=True,
+                )
 
     def configure_optimizers(self):
         """

@@ -12,6 +12,7 @@ import lightning.pytorch as pl
 import torch
 from torch.utils.data import DataLoader
 
+from horizyn.datasets.base import BaseDataset
 from horizyn.datasets.collection import MergeDataset, TupleDataset
 from horizyn.datasets.fingerprints import (
     DRFPFingerprintDataset,
@@ -51,6 +52,8 @@ class HorizynDataModule(pl.LightningDataModule):
         standardize: Whether to standardize SMILES. Defaults to True.
         standardize_reactions: Whether to standardize reactions. Defaults to True.
         standardize_hypervalent: Whether to standardize hypervalent atoms. Defaults to True.
+        standardize_remove_hs: Whether to remove explicit hydrogen atoms. Defaults to True.
+        standardize_kekulize: Whether to kekulize aromatic compounds. Defaults to False.
         standardize_uncharge: Whether to uncharge molecules. Defaults to True.
         standardize_metals: Whether to standardize metals. Defaults to True.
 
@@ -81,6 +84,8 @@ class HorizynDataModule(pl.LightningDataModule):
         standardize: bool = True,
         standardize_reactions: bool = True,
         standardize_hypervalent: bool = True,
+        standardize_remove_hs: bool = True,
+        standardize_kekulize: bool = False,
         standardize_uncharge: bool = True,
         standardize_metals: bool = True,
     ):
@@ -107,6 +112,8 @@ class HorizynDataModule(pl.LightningDataModule):
         self.standardize = standardize
         self.standardize_reactions = standardize_reactions
         self.standardize_hypervalent = standardize_hypervalent
+        self.standardize_remove_hs = standardize_remove_hs
+        self.standardize_kekulize = standardize_kekulize
         self.standardize_uncharge = standardize_uncharge
         self.standardize_metals = standardize_metals
 
@@ -115,7 +122,8 @@ class HorizynDataModule(pl.LightningDataModule):
         self._val_data = None
         self._val_query_data = None
         self._query_data = None  # Shared query dataset (reactions with fingerprints)
-        self._target_data = None  # Shared target dataset (protein embeddings)
+        self._target_data = None  # Training target dataset (protein embeddings)
+        self._screening_target_data = None  # Full screening set (train + val proteins)
 
     def setup(self, stage: Optional[str] = None):
         """
@@ -131,6 +139,48 @@ class HorizynDataModule(pl.LightningDataModule):
             self._setup_training_data()
             self._setup_validation_data()
 
+    def _augment_pairs_bidirectional(self, pairs: BaseDataset) -> BaseDataset:
+        """
+        Augment pairs with bidirectional reaction variants.
+
+        For each pair (reaction_id, protein_id):
+        - Forward: (reaction_id_f, protein_id)
+        - Backward: (reaction_id_r, protein_id)
+
+        Args:
+            pairs: Dataset with query_id (reaction_id) and target_id (protein_id).
+
+        Returns:
+            Augmented dataset with both forward and backward pairs.
+        """
+        augmented_keys = []
+        augmented_data = []
+
+        for pair_key in pairs.keys:
+            pair_data = pairs[pair_key]
+            query_id = pair_data["query_id"]
+            target_id = pair_data["target_id"]
+
+            # Forward direction
+            augmented_keys.append(f"{pair_key}_f")
+            augmented_data.append(
+                {
+                    "query_id": f"{query_id}_f",
+                    "target_id": target_id,
+                }
+            )
+
+            # Backward direction
+            augmented_keys.append(f"{pair_key}_r")
+            augmented_data.append(
+                {
+                    "query_id": f"{query_id}_r",
+                    "target_id": target_id,
+                }
+            )
+
+        return BaseDataset(keys=augmented_keys, array_data=augmented_data)
+
     def _setup_training_data(self):
         """Setup training dataset with fingerprints and embeddings."""
         print("Setting up training data...")
@@ -144,7 +194,12 @@ class HorizynDataModule(pl.LightningDataModule):
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
             in_memory=True,
         )
-        print(f"  Loaded {len(train_pairs)} training pairs")
+        original_pair_count = len(train_pairs)
+        print(f"  Loaded {original_pair_count} training pairs")
+
+        # Augment pairs with bidirectional reactions (forward + backward)
+        train_pairs = self._augment_pairs_bidirectional(train_pairs)
+        print(f"  Augmented to {len(train_pairs)} bidirectional pairs")
 
         # Load query data (reactions with fingerprints) - shared with validation
         self._query_data = self._create_query_dataset()
@@ -182,14 +237,57 @@ class HorizynDataModule(pl.LightningDataModule):
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
             in_memory=True,
         )
-        print(f"  Loaded {len(val_pairs)} validation pairs")
+        original_val_pair_count = len(val_pairs)
+        print(f"  Loaded {original_val_pair_count} validation pairs")
 
-        # Reuse query and target datasets from training (already cached in memory)
+        # Augment validation pairs with bidirectional reactions (forward + backward)
+        val_pairs = self._augment_pairs_bidirectional(val_pairs)
+        print(f"  Augmented to {len(val_pairs)} bidirectional pairs")
+
+        # Reuse query dataset from training (already cached in memory)
         if self._query_data is None or self._target_data is None:
             raise RuntimeError(
                 "Training data must be setup before validation data. "
                 "Query and target datasets are shared between train and validation."
             )
+
+        # Create full screening set: ALL proteins from train + val
+        # This is critical for correct validation metrics
+        train_pairs = SQLDataset(
+            file_path=str(self.train_pairs_path),
+            table_name="protein_to_reaction",
+            search_key="pr_id",
+            columns=["reaction_id", "protein_id"],
+            rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
+            in_memory=True,
+        )
+
+        # Collect all unique protein IDs from both train and val
+        all_protein_ids = set()
+        for pair_key in train_pairs.keys:
+            all_protein_ids.add(train_pairs[pair_key]["target_id"])
+        for pair_key in val_pairs.keys:
+            all_protein_ids.add(val_pairs[pair_key]["target_id"])
+
+        # Load full protein embeddings (all proteins in the HDF5 file)
+        # We need this to be the complete screening set
+        full_protein_dataset = EmbedDataset(
+            file_path=str(self.proteins_path),
+            in_memory=True,
+        )
+
+        # Store as screening target data (used for validation lookup table)
+        self._screening_target_data = full_protein_dataset
+
+        train_protein_ids = set(train_pairs[k]["target_id"] for k in train_pairs.keys)
+        val_protein_ids = set(val_pairs[k]["target_id"] for k in val_pairs.keys)
+        screening_protein_ids = set(full_protein_dataset.keys)
+
+        print(f"  Training proteins: {len(train_protein_ids)}")
+        print(f"  Validation proteins: {len(val_protein_ids)}")
+        print(f"  Screening set (full): {len(screening_protein_ids)} proteins")
+        print(f"  Overlap (train ∩ val): {len(train_protein_ids & val_protein_ids)}")
+        print(f"  Val-only proteins: {len(val_protein_ids - train_protein_ids)}")
 
         # Validation data for loss computation
         self._val_data = TupleDataset(
@@ -204,9 +302,33 @@ class HorizynDataModule(pl.LightningDataModule):
             },
         )
 
-        # Store datasets for retrieval metrics
+        # Group pairs by query_id for multi-label retrieval metrics
+        # Each query (reaction) has multiple valid targets (proteins)
+        from collections import defaultdict
+        from horizyn.datasets.base import BaseDataset
+
+        query_to_targets = defaultdict(list)
+        for pair_key in val_pairs.keys:
+            pair = val_pairs[pair_key]
+            query_id = pair["query_id"]
+            target_id = pair["target_id"]
+            query_to_targets[query_id].append(target_id)
+
+        # Get unique query IDs (sorted for determinism)
+        unique_query_ids = sorted(query_to_targets.keys())
+
+        # Create retrieval dataset: maps query_id -> list of target_ids
+        retrieval_array_data = [query_to_targets[qid] for qid in unique_query_ids]
+
+        # Store query-to-targets mapping and create retrieval dataset
+        self._query_to_targets = query_to_targets
+
+        # Create dataset for retrieval queries (unique queries only)
         self._val_query_data = TupleDataset(
-            tuple_dataset=val_pairs,
+            tuple_dataset=BaseDataset(
+                keys=unique_query_ids,
+                array_data=[{"query_id": qid} for qid in unique_query_ids],
+            ),
             key_name_to_dataset={
                 "query_id": self._query_data,
             },
@@ -215,11 +337,63 @@ class HorizynDataModule(pl.LightningDataModule):
             },
         )
 
+        # Store target list dataset for metrics computation
+        self._val_retrieval_targets = BaseDataset(
+            keys=unique_query_ids,
+            array_data=retrieval_array_data,
+        )
+
         print(f"Validation dataset ready: {len(self._val_data)} samples")
+        print(f"  Unique validation queries: {len(unique_query_ids)}")
+        print(f"  Avg targets per query: {len(val_pairs) / len(unique_query_ids):.2f}")
+
+    def _augment_reactions_bidirectional(self, reactions: BaseDataset) -> BaseDataset:
+        """
+        Augment reactions with bidirectional variants (forward and reverse).
+
+        For each reaction with key 'rxn_id' and SMILES 'A>>B':
+        - Forward: key='rxn_id_f', smiles='A>>B'
+        - Backward: key='rxn_id_r', smiles='B>>A'
+
+        Args:
+            reactions: Dataset with reaction_smiles.
+
+        Returns:
+            Augmented dataset with both forward and backward reactions.
+        """
+        augmented_keys = []
+        augmented_data = []
+
+        for rxn_id in reactions.keys:
+            rxn_data = reactions[rxn_id]
+            smiles = rxn_data["reaction_smiles"]
+
+            # Forward direction
+            augmented_keys.append(f"{rxn_id}_f")
+            augmented_data.append({"reaction_smiles": smiles})
+
+            # Backward direction (reverse reactants and products)
+            if ">>" in smiles:
+                parts = smiles.split(">>")
+                if len(parts) == 2:
+                    reversed_smiles = f"{parts[1]}>>{parts[0]}"
+                    augmented_keys.append(f"{rxn_id}_r")
+                    augmented_data.append({"reaction_smiles": reversed_smiles})
+                else:
+                    # Malformed SMILES - skip backward
+                    print(f"Warning: Malformed reaction SMILES for {rxn_id}: {smiles}")
+            else:
+                # No '>>' separator - skip backward
+                print(f"Warning: No '>>' separator in reaction SMILES for {rxn_id}: {smiles}")
+
+        return BaseDataset(keys=augmented_keys, array_data=augmented_data)
 
     def _create_query_dataset(self):
         """
         Create query dataset with RDKit+ and DRFP fingerprints.
+
+        Reactions are augmented bidirectionally (forward + backward) to double
+        the training data and ensure reversible reactions are learned properly.
 
         Returns:
             Dataset that returns concatenated 2048-dim fingerprints.
@@ -233,6 +407,10 @@ class HorizynDataModule(pl.LightningDataModule):
             in_memory=True,
         )
 
+        # Augment with bidirectional reactions (forward + backward)
+        reactions = self._augment_reactions_bidirectional(reactions)
+        print(f"  Augmented to {len(reactions)} bidirectional reactions")
+
         # Generate RDKit+ fingerprints (1024-dim)
         rdkit_fp = RDKitPlusFingerprintDataset(
             reaction_dataset=reactions,
@@ -242,6 +420,8 @@ class HorizynDataModule(pl.LightningDataModule):
             use_chirality=True,
             standardize=self.standardize_reactions,
             standardize_hypervalent=self.standardize_hypervalent,
+            standardize_remove_hs=self.standardize_remove_hs,
+            standardize_kekulize=self.standardize_kekulize,
             standardize_uncharge=self.standardize_uncharge,
             standardize_metals=self.standardize_metals,
         )
@@ -254,6 +434,8 @@ class HorizynDataModule(pl.LightningDataModule):
             rings=True,
             standardize=self.standardize_reactions,
             standardize_hypervalent=self.standardize_hypervalent,
+            standardize_remove_hs=self.standardize_remove_hs,
+            standardize_kekulize=self.standardize_kekulize,
             standardize_uncharge=self.standardize_uncharge,
             standardize_metals=self.standardize_metals,
         )
@@ -326,13 +508,13 @@ class HorizynDataModule(pl.LightningDataModule):
 
         Returns list of dataloaders:
             1. Validation loss dataloader
-            2. Target lookup table dataloader
+            2. Target lookup table dataloader (FULL screening set: train + val proteins)
             3. Query retrieval metrics dataloader
 
         Returns:
             List of DataLoaders for validation.
         """
-        if self._val_data is None or self._target_data is None:
+        if self._val_data is None or self._screening_target_data is None:
             raise RuntimeError("Validation data not setup. Call setup() first.")
 
         dataloaders = []
@@ -349,10 +531,11 @@ class HorizynDataModule(pl.LightningDataModule):
             )
         )
 
-        # 2. Target lookup table (for retrieval metrics)
+        # 2. Target lookup table (FULL screening set for retrieval metrics)
+        # CRITICAL: Must include ALL proteins (train + val), not just training proteins
         dataloaders.append(
             DataLoader(
-                self._target_data,
+                self._screening_target_data,
                 batch_size=self.train_batch_size,
                 shuffle=False,
                 num_workers=self.num_workers,

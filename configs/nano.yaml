@@ -35,6 +35,8 @@ data:
   # Reaction standardization
   standardize_reactions: true
   standardize_hypervalent: true
+  standardize_remove_hs: true
+  standardize_kekulize: false
   standardize_uncharge: true
   standardize_metals: true
 

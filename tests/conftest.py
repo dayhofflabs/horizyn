@@ -10,10 +10,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: mark test as an integration test (runs by default)"
     )
-    config.addinivalue_line(
-        "markers",
-        "slow: mark test as slow (5+ minutes, skipped by default with -m 'not slow')",
-    )
 
 
 @pytest.fixture
