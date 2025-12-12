@@ -68,21 +68,15 @@ All configuration files follow this structure:
 ```yaml
 # Data configuration
 data:
-  reactions_db: "path/to/reactions.db"          # SQLite with reaction SMILES
-  proteins_h5: "path/to/proteins_t5.h5"         # HDF5 with T5 embeddings
-  train_pairs_db: "path/to/train_pairs.db"      # Training pairs
-  val_pairs_db: "path/to/val_pairs.db"          # Validation pairs
+  train_pairs_path: "path/to/train_pairs.csv"       # Training pairs CSV
+  val_pairs_path: "path/to/val_pairs.csv"           # Validation pairs CSV
+  train_reactions_path: "path/to/train_rxns.csv"             # Training reactions CSV
+  val_reactions_path: "path/to/val_rxns.csv"                 # Validation reactions CSV
+  protein_embeds_path: "path/to/protein_embeds.h5"         # HDF5 with T5 embeddings
   
-  query_fp_kwargs:                               # Reaction fingerprint config
-    rdkit_plus:                                  # RDKit+ structural fingerprints
-      radius: 3
-      nbits: 2048
-      include_chirality: true
-      fp_types: ["morgan", "rdkit", "atompair", "topological_torsion", "pattern"]
-    drfp:                                        # DRFP difference fingerprints
-      nbits: 2048
-      radius: 3
-      rings: true
+  # Reaction fingerprint dimensions
+  rdkit_fp_dim: 1024                                 # RDKit+ fingerprint dimension
+  drfp_dim: 1024                                     # DRFP fingerprint dimension
 
 # Model architecture
 model:
@@ -172,10 +166,11 @@ To create a new configuration:
 2. **Update data paths** (if using different data):
    ```yaml
    data:
-     reactions_db: "data/my_dataset/reactions.db"
-     proteins_h5: "data/my_dataset/proteins_t5.h5"
-     train_pairs_db: "data/my_dataset/train_pairs.db"
-     val_pairs_db: "data/my_dataset/val_pairs.db"
+     train_pairs_path: "data/my_dataset/train_pairs.csv"
+     val_pairs_path: "data/my_dataset/val_pairs.csv"
+     train_reactions_path: "data/my_dataset/train_rxns.csv"
+     val_reactions_path: "data/my_dataset/val_rxns.csv"
+     protein_embeds_path: "data/my_dataset/protein_embeds.h5"
    ```
 
 3. **Adjust hyperparameters** as needed:

@@ -15,10 +15,11 @@ logging:
 data:
   # Paths to pre-split datasets (relative to project root)
   # Nanodata for fast integration testing
-  train_pairs_path: data/nanodata/train_pairs.db
-  val_pairs_path: data/nanodata/val_pairs.db
-  reactions_path: data/nanodata/reactions.db
-  proteins_path: data/nanodata/proteins_t5_embeddings.h5
+  train_pairs_path: data/nanodata/train_pairs.csv
+  val_pairs_path: data/nanodata/val_pairs.csv
+  train_reactions_path: data/nanodata/train_rxns.csv
+  val_reactions_path: data/nanodata/val_rxns.csv
+  protein_embeds_path: data/nanodata/protein_embeds.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)
@@ -59,7 +60,7 @@ model:
 # Training configuration
 training:
   # Number of epochs
-  max_epochs: 100
+  max_epochs: 10
 
   # Optimizer (AdamW)
   learning_rate: 0.0001        # 1e-4

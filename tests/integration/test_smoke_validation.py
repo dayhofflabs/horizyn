@@ -361,27 +361,23 @@ class TestScreeningSet:
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
         from horizyn.datasets.hdf5 import EmbedDataset
-        from horizyn.datasets.sql import SQLDataset
+        from horizyn.datasets.csv import CSVDataset
 
         config = load_config("configs/nano.yaml")
         dm = HorizynDataModule(**config.data)
         dm.setup("fit")
 
         # Get protein IDs from training and validation pairs
-        train_pairs = SQLDataset(
+        train_pairs = CSVDataset(
             file_path=config.data.train_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
-        val_pairs = SQLDataset(
+        val_pairs = CSVDataset(
             file_path=config.data.val_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
         # Get protein IDs that actually exist in the HDF5 file
@@ -417,27 +413,23 @@ class TestScreeningSet:
         """Test that proteins only in validation (not training) are in screening set."""
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
-        from horizyn.datasets.sql import SQLDataset
+        from horizyn.datasets.csv import CSVDataset
 
         config = load_config("configs/nano.yaml")
         dm = HorizynDataModule(**config.data)
         dm.setup("fit")
 
         # Get protein IDs
-        train_pairs = SQLDataset(
+        train_pairs = CSVDataset(
             file_path=config.data.train_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
-        val_pairs = SQLDataset(
+        val_pairs = CSVDataset(
             file_path=config.data.val_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
         train_protein_ids = set(train_pairs[k]["protein_id"] for k in train_pairs.keys)

@@ -5,21 +5,21 @@ This module loads pre-split datasets and creates dataloaders for training
 and validation. All data is loaded into memory at setup time.
 """
 
+from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional
 
 import lightning.pytorch as pl
-import torch
 from torch.utils.data import DataLoader
 
 from horizyn.datasets.base import BaseDataset
 from horizyn.datasets.collection import MergeDataset, TupleDataset
+from horizyn.datasets.csv import CSVDataset
 from horizyn.datasets.fingerprints import (
     DRFPFingerprintDataset,
     RDKitPlusFingerprintDataset,
 )
 from horizyn.datasets.hdf5 import EmbedDataset
-from horizyn.datasets.sql import SQLDataset
 from horizyn.datasets.transform import ConcatTensorTransform
 from horizyn.utils import default_collate
 
@@ -39,17 +39,17 @@ class HorizynDataModule(pl.LightningDataModule):
         - Retrieval batch size: 128
 
     Args:
-        train_pairs_path: Path to training pairs SQLite file.
-        val_pairs_path: Path to validation pairs SQLite file.
-        reactions_path: Path to reactions SQLite file.
-        proteins_path: Path to protein embeddings HDF5 file.
+        train_pairs_path: Path to training pairs CSV file.
+        val_pairs_path: Path to validation pairs CSV file.
+        train_reactions_path: Path to training reactions CSV file.
+        val_reactions_path: Path to validation reactions CSV file.
+        protein_embeds_path: Path to protein embeddings HDF5 file.
         train_batch_size: Batch size for training. Defaults to 16384.
         retrieval_batch_size: Batch size for retrieval metrics. Defaults to 128.
         num_workers: Number of dataloader workers. Defaults to 4.
         pin_memory: Whether to pin memory. Defaults to False.
         rdkit_fp_dim: Dimension of RDKit+ fingerprints. Defaults to 1024.
         drfp_dim: Dimension of DRFP fingerprints. Defaults to 1024.
-        standardize: Whether to standardize SMILES. Defaults to True.
         standardize_reactions: Whether to standardize reactions. Defaults to True.
         standardize_hypervalent: Whether to standardize hypervalent atoms. Defaults to True.
         standardize_remove_hs: Whether to remove explicit hydrogen atoms. Defaults to True.
@@ -59,10 +59,11 @@ class HorizynDataModule(pl.LightningDataModule):
 
     Example:
         >>> dm = HorizynDataModule(
-        ...     train_pairs_path="data/train_pairs.db",
-        ...     val_pairs_path="data/val_pairs.db",
-        ...     reactions_path="data/reactions.db",
-        ...     proteins_path="data/proteins_t5.h5",
+        ...     train_pairs_path="data/sota/train_pairs.csv",
+        ...     val_pairs_path="data/sota/val_pairs.csv",
+        ...     train_reactions_path="data/sota/train_rxns.csv",
+        ...     val_reactions_path="data/sota/val_rxns.csv",
+        ...     protein_embeds_path="data/sota/protein_embeds.h5",
         ... )
         >>> dm.setup("fit")
         >>> train_loader = dm.train_dataloader()
@@ -73,15 +74,15 @@ class HorizynDataModule(pl.LightningDataModule):
         self,
         train_pairs_path: str,
         val_pairs_path: str,
-        reactions_path: str,
-        proteins_path: str,
+        train_reactions_path: str,
+        val_reactions_path: str,
+        protein_embeds_path: str,
         train_batch_size: int = 16384,
         retrieval_batch_size: int = 128,
         num_workers: int = 4,
         pin_memory: bool = False,
         rdkit_fp_dim: int = 1024,
         drfp_dim: int = 1024,
-        standardize: bool = True,
         standardize_reactions: bool = True,
         standardize_hypervalent: bool = True,
         standardize_remove_hs: bool = True,
@@ -95,8 +96,9 @@ class HorizynDataModule(pl.LightningDataModule):
         # Store paths
         self.train_pairs_path = Path(train_pairs_path)
         self.val_pairs_path = Path(val_pairs_path)
-        self.reactions_path = Path(reactions_path)
-        self.proteins_path = Path(proteins_path)
+        self.train_reactions_path = Path(train_reactions_path)
+        self.val_reactions_path = Path(val_reactions_path)
+        self.protein_embeds_path = Path(protein_embeds_path)
 
         # Batch sizes
         self.train_batch_size = train_batch_size
@@ -109,7 +111,6 @@ class HorizynDataModule(pl.LightningDataModule):
         # Fingerprint settings
         self.rdkit_fp_dim = rdkit_fp_dim
         self.drfp_dim = drfp_dim
-        self.standardize = standardize
         self.standardize_reactions = standardize_reactions
         self.standardize_hypervalent = standardize_hypervalent
         self.standardize_remove_hs = standardize_remove_hs
@@ -121,9 +122,10 @@ class HorizynDataModule(pl.LightningDataModule):
         self._train_data = None
         self._val_data = None
         self._val_query_data = None
-        self._query_data = None  # Shared query dataset (reactions with fingerprints)
-        self._target_data = None  # Training target dataset (protein embeddings)
-        self._screening_target_data = None  # Full screening set (train + val proteins)
+        self._train_query_data = None  # Training query dataset (train reactions)
+        self._val_query_data_raw = None  # Validation query dataset (val reactions)
+        self._target_data = None  # Protein embeddings
+        self._screening_target_data = None  # Full screening set
 
     def setup(self, stage: Optional[str] = None):
         """
@@ -186,13 +188,11 @@ class HorizynDataModule(pl.LightningDataModule):
         print("Setting up training data...")
 
         # Load training pairs
-        train_pairs = SQLDataset(
+        train_pairs = CSVDataset(
             file_path=str(self.train_pairs_path),
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["reaction_id", "protein_id"],
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
-            in_memory=True,
         )
         original_pair_count = len(train_pairs)
         print(f"  Loaded {original_pair_count} training pairs")
@@ -201,11 +201,11 @@ class HorizynDataModule(pl.LightningDataModule):
         train_pairs = self._augment_pairs_bidirectional(train_pairs)
         print(f"  Augmented to {len(train_pairs)} bidirectional pairs")
 
-        # Load query data (reactions with fingerprints) - shared with validation
-        self._query_data = self._create_query_dataset()
-        print(f"  Loaded {len(self._query_data)} reactions")
+        # Load query data (train reactions with fingerprints)
+        self._train_query_data = self._create_query_dataset(self.train_reactions_path)
+        print(f"  Loaded {len(self._train_query_data)} train reactions")
 
-        # Load target data (protein embeddings) - shared with validation
+        # Load target data (protein embeddings)
         self._target_data = self._create_target_dataset()
         print(f"  Loaded {len(self._target_data)} proteins")
 
@@ -213,7 +213,7 @@ class HorizynDataModule(pl.LightningDataModule):
         self._train_data = TupleDataset(
             tuple_dataset=train_pairs,
             key_name_to_dataset={
-                "query_id": self._query_data,
+                "query_id": self._train_query_data,
                 "target_id": self._target_data,
             },
             rename_map={
@@ -229,13 +229,11 @@ class HorizynDataModule(pl.LightningDataModule):
         print("Setting up validation data...")
 
         # Load validation pairs
-        val_pairs = SQLDataset(
+        val_pairs = CSVDataset(
             file_path=str(self.val_pairs_path),
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["reaction_id", "protein_id"],
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
-            in_memory=True,
         )
         original_val_pair_count = len(val_pairs)
         print(f"  Loaded {original_val_pair_count} validation pairs")
@@ -244,42 +242,34 @@ class HorizynDataModule(pl.LightningDataModule):
         val_pairs = self._augment_pairs_bidirectional(val_pairs)
         print(f"  Augmented to {len(val_pairs)} bidirectional pairs")
 
-        # Reuse query dataset from training (already cached in memory)
-        if self._query_data is None or self._target_data is None:
+        # Load validation query data (val reactions with fingerprints)
+        self._val_query_data_raw = self._create_query_dataset(self.val_reactions_path)
+        print(f"  Loaded {len(self._val_query_data_raw)} val reactions")
+
+        # Ensure target data is loaded
+        if self._target_data is None:
             raise RuntimeError(
                 "Training data must be setup before validation data. "
-                "Query and target datasets are shared between train and validation."
+                "Target dataset must be loaded first."
             )
 
-        # Create full screening set: ALL proteins from train + val
-        # This is critical for correct validation metrics
-        train_pairs = SQLDataset(
-            file_path=str(self.train_pairs_path),
-            table_name="protein_to_reaction",
-            search_key="pr_id",
-            columns=["reaction_id", "protein_id"],
-            rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
-            in_memory=True,
-        )
-
-        # Collect all unique protein IDs from both train and val
-        all_protein_ids = set()
-        for pair_key in train_pairs.keys:
-            all_protein_ids.add(train_pairs[pair_key]["target_id"])
-        for pair_key in val_pairs.keys:
-            all_protein_ids.add(val_pairs[pair_key]["target_id"])
-
-        # Load full protein embeddings (all proteins in the HDF5 file)
-        # We need this to be the complete screening set
+        # Load full protein embeddings for screening
         full_protein_dataset = EmbedDataset(
-            file_path=str(self.proteins_path),
+            file_path=str(self.protein_embeds_path),
             in_memory=True,
         )
-
-        # Store as screening target data (used for validation lookup table)
         self._screening_target_data = full_protein_dataset
 
-        train_protein_ids = set(train_pairs[k]["target_id"] for k in train_pairs.keys)
+        # Collect protein stats
+        train_pairs_for_stats = CSVDataset(
+            file_path=str(self.train_pairs_path),
+            key_column="pr_id",
+            columns=["reaction_id", "protein_id"],
+            rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
+        )
+        train_protein_ids = set(
+            train_pairs_for_stats[k]["target_id"] for k in train_pairs_for_stats.keys
+        )
         val_protein_ids = set(val_pairs[k]["target_id"] for k in val_pairs.keys)
         screening_protein_ids = set(full_protein_dataset.keys)
 
@@ -293,7 +283,7 @@ class HorizynDataModule(pl.LightningDataModule):
         self._val_data = TupleDataset(
             tuple_dataset=val_pairs,
             key_name_to_dataset={
-                "query_id": self._query_data,
+                "query_id": self._val_query_data_raw,
                 "target_id": self._target_data,
             },
             rename_map={
@@ -303,10 +293,6 @@ class HorizynDataModule(pl.LightningDataModule):
         )
 
         # Group pairs by query_id for multi-label retrieval metrics
-        # Each query (reaction) has multiple valid targets (proteins)
-        from collections import defaultdict
-        from horizyn.datasets.base import BaseDataset
-
         query_to_targets = defaultdict(list)
         for pair_key in val_pairs.keys:
             pair = val_pairs[pair_key]
@@ -320,7 +306,7 @@ class HorizynDataModule(pl.LightningDataModule):
         # Create retrieval dataset: maps query_id -> list of target_ids
         retrieval_array_data = [query_to_targets[qid] for qid in unique_query_ids]
 
-        # Store query-to-targets mapping and create retrieval dataset
+        # Store query-to-targets mapping
         self._query_to_targets = query_to_targets
 
         # Create dataset for retrieval queries (unique queries only)
@@ -330,7 +316,7 @@ class HorizynDataModule(pl.LightningDataModule):
                 array_data=[{"query_id": qid} for qid in unique_query_ids],
             ),
             key_name_to_dataset={
-                "query_id": self._query_data,
+                "query_id": self._val_query_data_raw,
             },
             rename_map={
                 "query_id": "query_vec",
@@ -388,23 +374,24 @@ class HorizynDataModule(pl.LightningDataModule):
 
         return BaseDataset(keys=augmented_keys, array_data=augmented_data)
 
-    def _create_query_dataset(self):
+    def _create_query_dataset(self, reactions_path: Path):
         """
         Create query dataset with RDKit+ and DRFP fingerprints.
 
         Reactions are augmented bidirectionally (forward + backward) to double
         the training data and ensure reversible reactions are learned properly.
 
+        Args:
+            reactions_path: Path to reactions CSV file.
+
         Returns:
             Dataset that returns concatenated 2048-dim fingerprints.
         """
         # Load reaction SMILES
-        reactions = SQLDataset(
-            file_path=str(self.reactions_path),
-            table_name="reaction",
-            search_key="reaction_id",
+        reactions = CSVDataset(
+            file_path=str(reactions_path),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         # Augment with bidirectional reactions (forward + backward)
@@ -459,7 +446,7 @@ class HorizynDataModule(pl.LightningDataModule):
             Dataset that returns 1024-dim T5 embeddings.
         """
         return EmbedDataset(
-            file_path=str(self.proteins_path),
+            file_path=str(self.protein_embeds_path),
             in_memory=True,
         )
 
@@ -508,7 +495,7 @@ class HorizynDataModule(pl.LightningDataModule):
 
         Returns list of dataloaders:
             1. Validation loss dataloader
-            2. Target lookup table dataloader (FULL screening set: train + val proteins)
+            2. Target lookup table dataloader (FULL screening set)
             3. Query retrieval metrics dataloader
 
         Returns:
@@ -532,7 +519,6 @@ class HorizynDataModule(pl.LightningDataModule):
         )
 
         # 2. Target lookup table (FULL screening set for retrieval metrics)
-        # CRITICAL: Must include ALL proteins (train + val), not just training proteins
         dataloaders.append(
             DataLoader(
                 self._screening_target_data,

@@ -1,8 +1,8 @@
 """
-Unit tests for SQL and HDF5 dataset classes.
+Unit tests for CSV and HDF5 dataset classes.
 """
 
-import sqlite3
+import csv
 import tempfile
 from pathlib import Path
 
@@ -11,73 +11,42 @@ import numpy as np
 import pytest
 import torch
 
-from horizyn.datasets import EmbedDataset, SQLDataset
+from horizyn.datasets import EmbedDataset, CSVDataset
 
 
-class TestSQLDataset:
-    """Tests for the SQLDataset class."""
+class TestCSVDataset:
+    """Tests for the CSVDataset class."""
 
     @pytest.fixture
-    def sample_db(self, tmp_path):
-        """Create a sample SQLite database for testing."""
-        db_path = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
+    def sample_csv_reactions(self, tmp_path):
+        """Create a sample reactions CSV for testing."""
+        csv_path = tmp_path / "reactions.csv"
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["reaction_id", "reaction_smiles", "ec_number"])
+            writer.writerow(["rxn1", "CCO.O>>CC=O", "1.1.1.1"])
+            writer.writerow(["rxn2", "C.O>>CO", "2.2.2.2"])
+            writer.writerow(["rxn3", "CC>>C=C", "3.3.3.3"])
+        return csv_path
 
-        # Create reactions table
-        cursor.execute(
-            """
-            CREATE TABLE reactions (
-                reaction_id TEXT PRIMARY KEY,
-                reaction_smiles TEXT,
-                ec_number TEXT
-            )
-        """
-        )
+    @pytest.fixture
+    def sample_csv_pairs(self, tmp_path):
+        """Create a sample pairs CSV for testing."""
+        csv_path = tmp_path / "pairs.csv"
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["pr_id", "reaction_id", "protein_id"])
+            writer.writerow(["0", "rxn1", "prot1"])
+            writer.writerow(["1", "rxn2", "prot2"])
+            writer.writerow(["2", "rxn1", "prot3"])
+        return csv_path
 
-        # Insert sample data
-        cursor.executemany(
-            "INSERT INTO reactions VALUES (?, ?, ?)",
-            [
-                ("rxn1", "CCO.O>>CC=O", "1.1.1.1"),
-                ("rxn2", "C.O>>CO", "2.2.2.2"),
-                ("rxn3", "CC>>C=C", "3.3.3.3"),
-            ],
-        )
-
-        # Create pairs table
-        cursor.execute(
-            """
-            CREATE TABLE pairs (
-                pair_id TEXT PRIMARY KEY,
-                query_id TEXT,
-                target_id TEXT
-            )
-        """
-        )
-
-        cursor.executemany(
-            "INSERT INTO pairs VALUES (?, ?, ?)",
-            [
-                ("pair1", "rxn1", "prot1"),
-                ("pair2", "rxn2", "prot2"),
-                ("pair3", "rxn1", "prot3"),
-            ],
-        )
-
-        conn.commit()
-        conn.close()
-
-        return db_path
-
-    def test_initialization(self, sample_db):
+    def test_initialization(self, sample_csv_reactions):
         """Test basic initialization."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         assert len(dataset) == 3
@@ -85,56 +54,48 @@ class TestSQLDataset:
         assert "rxn2" in dataset.keys
         assert "rxn3" in dataset.keys
 
-    def test_getitem_single_column(self, sample_db):
+    def test_getitem_single_column(self, sample_csv_reactions):
         """Test accessing data with a single column."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns="reaction_smiles",
-            in_memory=True,
         )
 
         sample = dataset["rxn1"]
         assert sample == {"reaction_smiles": "CCO.O>>CC=O"}
 
-    def test_getitem_multiple_columns(self, sample_db):
+    def test_getitem_multiple_columns(self, sample_csv_reactions):
         """Test accessing data with multiple columns."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles", "ec_number"],
-            in_memory=True,
         )
 
         sample = dataset["rxn2"]
         assert sample == {"reaction_smiles": "C.O>>CO", "ec_number": "2.2.2.2"}
 
-    def test_all_columns(self, sample_db):
-        """Test loading all columns (except search_key)."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+    def test_all_columns(self, sample_csv_reactions):
+        """Test loading all columns (except key_column)."""
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=None,  # Load all columns
-            in_memory=True,
         )
 
         sample = dataset["rxn1"]
         assert "reaction_smiles" in sample
         assert "ec_number" in sample
-        assert "reaction_id" not in sample  # search_key excluded
+        assert "reaction_id" not in sample  # key_column excluded
 
-    def test_rename_columns(self, sample_db):
+    def test_rename_columns(self, sample_csv_reactions):
         """Test column renaming."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
             rename_map={"reaction_smiles": "smiles"},
-            in_memory=True,
         )
 
         sample = dataset["rxn1"]
@@ -144,119 +105,72 @@ class TestSQLDataset:
     def test_file_not_found(self, tmp_path):
         """Test that missing file raises error."""
         with pytest.raises(FileNotFoundError):
-            SQLDataset(
-                file_path=str(tmp_path / "nonexistent.db"),
-                table_name="reactions",
-                search_key="reaction_id",
+            CSVDataset(
+                file_path=str(tmp_path / "nonexistent.csv"),
+                key_column="reaction_id",
             )
 
-    def test_table_not_found(self, sample_db):
-        """Test that missing table raises error."""
-        with pytest.raises(sqlite3.DatabaseError, match="Table.*not found"):
-            SQLDataset(
-                file_path=str(sample_db), table_name="nonexistent_table", search_key="reaction_id"
+    def test_key_column_not_found(self, sample_csv_reactions):
+        """Test that missing key_column raises error."""
+        with pytest.raises(ValueError, match="Key column.*not found"):
+            CSVDataset(
+                file_path=str(sample_csv_reactions),
+                key_column="nonexistent_column",
             )
 
-    def test_search_key_not_found(self, sample_db):
-        """Test that missing search_key column raises error."""
-        with pytest.raises(sqlite3.DatabaseError, match="Search key.*not found"):
-            SQLDataset(
-                file_path=str(sample_db), table_name="reactions", search_key="nonexistent_column"
-            )
-
-    def test_column_not_found(self, sample_db):
+    def test_column_not_found(self, sample_csv_reactions):
         """Test that missing column raises error."""
         with pytest.raises(ValueError, match="Columns.*not found"):
-            SQLDataset(
-                file_path=str(sample_db),
-                table_name="reactions",
-                search_key="reaction_id",
+            CSVDataset(
+                file_path=str(sample_csv_reactions),
+                key_column="reaction_id",
                 columns=["nonexistent_column"],
             )
 
-    def test_key_not_found(self, sample_db):
+    def test_key_not_found(self, sample_csv_reactions):
         """Test that accessing non-existent key raises error."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         with pytest.raises(KeyError, match="not found"):
             dataset["nonexistent_rxn"]
 
-    def test_in_memory_true(self, sample_db):
-        """Test in-memory loading."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
-            columns=["reaction_smiles"],
-            in_memory=True,
-        )
-
-        assert dataset.in_memory is True
-        assert dataset._data is not None
-        assert len(dataset._data) == 3
-
-    def test_in_memory_false(self, sample_db):
-        """Test on-the-fly loading from database."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
-            columns=["reaction_smiles"],
-            in_memory=False,
-        )
-
-        assert dataset.in_memory is False
-        assert dataset._data is None
-
-        # Should still be able to access data
-        sample = dataset["rxn1"]
-        assert sample == {"reaction_smiles": "CCO.O>>CC=O"}
-
-    def test_pairs_table(self, sample_db):
-        """Test loading a pairs table (typical use case)."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="pairs",
-            search_key="pair_id",
-            columns=["query_id", "target_id"],
-            in_memory=True,
+    def test_pairs_csv(self, sample_csv_pairs):
+        """Test loading a pairs CSV (typical use case)."""
+        dataset = CSVDataset(
+            file_path=str(sample_csv_pairs),
+            key_column="pr_id",
+            columns=["reaction_id", "protein_id"],
         )
 
         assert len(dataset) == 3
 
-        pair1 = dataset["pair1"]
-        assert pair1 == {"query_id": "rxn1", "target_id": "prot1"}
+        pair0 = dataset["0"]
+        assert pair0 == {"reaction_id": "rxn1", "protein_id": "prot1"}
 
-        pair2 = dataset["pair2"]
-        assert pair2 == {"query_id": "rxn2", "target_id": "prot2"}
+        pair1 = dataset["1"]
+        assert pair1 == {"reaction_id": "rxn2", "protein_id": "prot2"}
 
-    def test_iteration(self, sample_db):
+    def test_iteration(self, sample_csv_reactions):
         """Test that dataset is iterable."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         items = [dataset[key] for key in dataset.keys]
         assert len(items) == 3
 
-    def test_integer_indexing(self, sample_db):
+    def test_integer_indexing(self, sample_csv_reactions):
         """Test that dataset supports integer indexing."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         # Access by integer index
@@ -269,14 +183,12 @@ class TestSQLDataset:
         assert sample1 == dataset[dataset.keys[1]]
         assert sample2 == dataset[dataset.keys[2]]
 
-    def test_integer_indexing_out_of_bounds(self, sample_db):
+    def test_integer_indexing_out_of_bounds(self, sample_csv_reactions):
         """Test that out of bounds integer index raises IndexError."""
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         with pytest.raises(IndexError, match="out of bounds"):
@@ -285,16 +197,14 @@ class TestSQLDataset:
         with pytest.raises(IndexError, match="out of bounds"):
             dataset[-1]
 
-    def test_integer_indexing_dataloader_compatible(self, sample_db):
+    def test_integer_indexing_dataloader_compatible(self, sample_csv_reactions):
         """Test that integer indexing makes dataset compatible with DataLoader."""
         from torch.utils.data import DataLoader
 
-        dataset = SQLDataset(
-            file_path=str(sample_db),
-            table_name="reactions",
-            search_key="reaction_id",
+        dataset = CSVDataset(
+            file_path=str(sample_csv_reactions),
+            key_column="reaction_id",
             columns=["reaction_smiles"],
-            in_memory=True,
         )
 
         # Should be able to create a DataLoader
@@ -535,30 +445,18 @@ class TestEmbedDataset:
         assert first_batch.shape == (2, 512)  # batch_size x vec_dim
 
 
-class TestSQLAndHDF5Integration:
-    """Integration tests combining SQL and HDF5 datasets."""
+class TestCSVAndHDF5Integration:
+    """Integration tests combining CSV and HDF5 datasets."""
 
     def test_realistic_workflow(self, tmp_path):
         """Test a realistic workflow with pairs, reactions, and embeddings."""
-        # Create pairs database
-        pairs_db = tmp_path / "pairs.db"
-        conn = sqlite3.connect(str(pairs_db))
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE pairs (
-                pair_id TEXT PRIMARY KEY,
-                query_id TEXT,
-                target_id TEXT
-            )
-        """
-        )
-        cursor.executemany(
-            "INSERT INTO pairs VALUES (?, ?, ?)",
-            [("pair1", "rxn1", "prot1"), ("pair2", "rxn2", "prot2")],
-        )
-        conn.commit()
-        conn.close()
+        # Create pairs CSV
+        pairs_csv = tmp_path / "pairs.csv"
+        with open(pairs_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["pr_id", "reaction_id", "protein_id"])
+            writer.writerow(["0", "rxn1", "prot1"])
+            writer.writerow(["1", "rxn2", "prot2"])
 
         # Create embeddings HDF5
         embeds_h5 = tmp_path / "embeddings.h5"
@@ -569,19 +467,17 @@ class TestSQLAndHDF5Integration:
             f.create_dataset("vectors", data=vectors)
 
         # Load datasets
-        pairs = SQLDataset(
-            file_path=str(pairs_db),
-            table_name="pairs",
-            search_key="pair_id",
-            columns=["query_id", "target_id"],
-            in_memory=True,
+        pairs = CSVDataset(
+            file_path=str(pairs_csv),
+            key_column="pr_id",
+            columns=["reaction_id", "protein_id"],
         )
 
         embeds = EmbedDataset(file_path=str(embeds_h5), in_memory=True)
 
         # Test accessing related data
-        pair1 = pairs["pair1"]
-        target_id = pair1["target_id"]
+        pair0 = pairs["0"]
+        target_id = pair0["protein_id"]
         embedding = embeds[target_id]
 
         assert embedding.shape == (512,)
