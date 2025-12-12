@@ -5,16 +5,17 @@ Verifies that all standardization parameters can be configured and are
 correctly propagated from config to fingerprint generation.
 """
 
-import pytest
+import csv
 import tempfile
 from pathlib import Path
-import sqlite3
+
 import h5py
 import numpy as np
+import pytest
 
 from horizyn.data_module import HorizynDataModule
-from horizyn.datasets.fingerprints import RDKitPlusFingerprintDataset, DRFPFingerprintDataset
 from horizyn.datasets.base import BaseDataset
+from horizyn.datasets.fingerprints import DRFPFingerprintDataset, RDKitPlusFingerprintDataset
 
 
 class TestStandardizationConfiguration:
@@ -58,22 +59,28 @@ class TestStandardizationConfiguration:
     def test_data_module_accepts_all_parameters(self, tmp_path):
         """Test that HorizynDataModule accepts all standardization parameters."""
         # Create minimal test data
-        train_pairs_path = tmp_path / "train_pairs.db"
-        val_pairs_path = tmp_path / "val_pairs.db"
-        reactions_path = tmp_path / "reactions.db"
-        proteins_path = tmp_path / "proteins.h5"
+        train_pairs_path = tmp_path / "train_pairs.csv"
+        val_pairs_path = tmp_path / "val_pairs.csv"
+        train_reactions_path = tmp_path / "train_rxns.csv"
+        val_reactions_path = tmp_path / "val_rxns.csv"
+        protein_embeds_path = tmp_path / "protein_embeds.h5"
 
-        # Create minimal databases
-        self._create_minimal_database(
-            train_pairs_path, val_pairs_path, reactions_path, proteins_path
+        # Create minimal CSV files
+        self._create_minimal_csv_data(
+            train_pairs_path,
+            val_pairs_path,
+            train_reactions_path,
+            val_reactions_path,
+            protein_embeds_path,
         )
 
         # Test data module initialization with all parameters
         dm = HorizynDataModule(
             train_pairs_path=str(train_pairs_path),
             val_pairs_path=str(val_pairs_path),
-            reactions_path=str(reactions_path),
-            proteins_path=str(proteins_path),
+            train_reactions_path=str(train_reactions_path),
+            val_reactions_path=str(val_reactions_path),
+            protein_embeds_path=str(protein_embeds_path),
             standardize_reactions=True,
             standardize_hypervalent=True,
             standardize_remove_hs=True,
@@ -132,21 +139,27 @@ class TestStandardizationConfiguration:
         # config -> data module -> fingerprint datasets -> standardizer
 
         # Create minimal test data
-        train_pairs_path = tmp_path / "train_pairs.db"
-        val_pairs_path = tmp_path / "val_pairs.db"
-        reactions_path = tmp_path / "reactions.db"
-        proteins_path = tmp_path / "proteins.h5"
+        train_pairs_path = tmp_path / "train_pairs.csv"
+        val_pairs_path = tmp_path / "val_pairs.csv"
+        train_reactions_path = tmp_path / "train_rxns.csv"
+        val_reactions_path = tmp_path / "val_rxns.csv"
+        protein_embeds_path = tmp_path / "protein_embeds.h5"
 
-        self._create_minimal_database(
-            train_pairs_path, val_pairs_path, reactions_path, proteins_path
+        self._create_minimal_csv_data(
+            train_pairs_path,
+            val_pairs_path,
+            train_reactions_path,
+            val_reactions_path,
+            protein_embeds_path,
         )
 
         # Create data module with specific standardization settings
         dm = HorizynDataModule(
             train_pairs_path=str(train_pairs_path),
             val_pairs_path=str(val_pairs_path),
-            reactions_path=str(reactions_path),
-            proteins_path=str(proteins_path),
+            train_reactions_path=str(train_reactions_path),
+            val_reactions_path=str(val_reactions_path),
+            protein_embeds_path=str(protein_embeds_path),
             standardize_reactions=True,
             standardize_hypervalent=False,  # Custom value
             standardize_remove_hs=False,  # Custom value
@@ -168,52 +181,40 @@ class TestStandardizationConfiguration:
         assert dm.standardize_uncharge is False
         assert dm.standardize_metals is False
 
-    def _create_minimal_database(
-        self, train_pairs_path, val_pairs_path, reactions_path, proteins_path
+    def _create_minimal_csv_data(
+        self,
+        train_pairs_path,
+        val_pairs_path,
+        train_reactions_path,
+        val_reactions_path,
+        protein_embeds_path,
     ):
-        """Create minimal test databases."""
+        """Create minimal test CSV data."""
         # Train pairs
-        conn = sqlite3.connect(train_pairs_path)
-        c = conn.cursor()
-        c.execute(
-            """CREATE TABLE protein_to_reaction (
-            pr_id INTEGER PRIMARY KEY,
-            reaction_id TEXT,
-            protein_id TEXT
-        )"""
-        )
-        c.execute("INSERT INTO protein_to_reaction VALUES (1, 'rxn1', 'prot1')")
-        conn.commit()
-        conn.close()
+        with open(train_pairs_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
+            writer.writeheader()
+            writer.writerow({"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"})
 
         # Val pairs
-        conn = sqlite3.connect(val_pairs_path)
-        c = conn.cursor()
-        c.execute(
-            """CREATE TABLE protein_to_reaction (
-            pr_id INTEGER PRIMARY KEY,
-            reaction_id TEXT,
-            protein_id TEXT
-        )"""
-        )
-        c.execute("INSERT INTO protein_to_reaction VALUES (1, 'rxn1', 'prot1')")
-        conn.commit()
-        conn.close()
+        with open(val_pairs_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
+            writer.writeheader()
+            writer.writerow({"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"})
 
-        # Reactions
-        conn = sqlite3.connect(reactions_path)
-        c = conn.cursor()
-        c.execute(
-            """CREATE TABLE reaction (
-            reaction_id TEXT PRIMARY KEY,
-            reaction_smiles TEXT
-        )"""
-        )
-        c.execute("INSERT INTO reaction VALUES ('rxn1', 'CC>>CCO')")
-        conn.commit()
-        conn.close()
+        # Train reactions
+        with open(train_reactions_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
+            writer.writeheader()
+            writer.writerow({"reaction_id": "rxn1", "reaction_smiles": "CC>>CCO"})
+
+        # Val reactions
+        with open(val_reactions_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
+            writer.writeheader()
+            writer.writerow({"reaction_id": "rxn1", "reaction_smiles": "CC>>CCO"})
 
         # Proteins
-        with h5py.File(proteins_path, "w") as f:
+        with h5py.File(protein_embeds_path, "w") as f:
             f.create_dataset("ids", data=np.array([b"prot1"]))
             f.create_dataset("vectors", data=np.random.randn(1, 1024).astype(np.float32))

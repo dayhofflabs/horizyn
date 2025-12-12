@@ -360,8 +360,8 @@ class TestScreeningSet:
         """Test that screening set includes ALL proteins from train and val that exist in HDF5."""
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
-        from horizyn.datasets.hdf5 import EmbedDataset
         from horizyn.datasets.csv import CSVDataset
+        from horizyn.datasets.hdf5 import EmbedDataset
 
         config = load_config("configs/nano.yaml")
         dm = HorizynDataModule(**config.data)
@@ -382,7 +382,7 @@ class TestScreeningSet:
 
         # Get protein IDs that actually exist in the HDF5 file
         all_proteins_hdf5 = EmbedDataset(
-            file_path=config.data.proteins_path,
+            file_path=config.data.protein_embeds_path,
             in_memory=True,
         )
         available_protein_ids = set(all_proteins_hdf5.keys)

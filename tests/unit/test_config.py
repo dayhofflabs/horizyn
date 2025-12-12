@@ -183,10 +183,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
@@ -204,10 +205,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 # Missing 'model' section
                 "training": {"max_epochs": 100},
@@ -240,10 +242,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
@@ -261,10 +264,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
@@ -282,10 +286,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
                     "query_encoder_dims": [2048, 4096, 512],
@@ -303,10 +308,11 @@ class TestValidateConfig:
         config = DotDict(
             {
                 "data": {
-                    "train_pairs_path": "data/train.db",
-                    "val_pairs_path": "data/val.db",
-                    "reactions_path": "data/reactions.db",
-                    "proteins_path": "data/proteins.h5",
+                    "train_pairs_path": "data/train_pairs.csv",
+                    "val_pairs_path": "data/val_pairs.csv",
+                    "train_reactions_path": "data/train_rxns.csv",
+                    "val_reactions_path": "data/val_rxns.csv",
+                    "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
                     "query_encoder_dims": "2048,4096,512",  # Wrong type (string)
@@ -391,7 +397,7 @@ class TestLoadConfig:
         config = load_config(str(config_path))
 
         # Should be able to access using dot notation
-        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
+        assert config.data.train_pairs_path == "data/sota/train_pairs.csv"
         assert config.model.query_encoder_dims == [2048, 4096, 512]
         assert config.training.learning_rate == 1e-4
 
@@ -417,7 +423,7 @@ class TestIntegration:
         assert config.seed == 123
 
         # Verify validation passed
-        assert config.data.train_pairs_path == "data/swissprot/train_pairs.db"
+        assert config.data.train_pairs_path == "data/sota/train_pairs.csv"
 
     def test_config_modification_after_loading(self):
         """Test that config can be modified after loading."""

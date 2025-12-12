@@ -32,7 +32,7 @@ class TestSmokeConfigAndErrors:
         config = load_config("configs/nano.yaml")
 
         # Override to point to non-existent files
-        config.data.reactions_path = "data/nonexistent/reactions.db"
+        config.data.train_reactions_path = "data/nonexistent/train_rxns.csv"
 
         data_module = HorizynDataModule(**config.data)
 
