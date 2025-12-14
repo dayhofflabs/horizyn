@@ -98,8 +98,7 @@ class CSVDataset(BaseDataset[str]):
         # Verify key column exists
         if key_column not in header:
             raise ValueError(
-                f"Key column '{key_column}' not found in CSV. "
-                f"Available columns: {header}"
+                f"Key column '{key_column}' not found in CSV. " f"Available columns: {header}"
             )
 
         # Determine columns to load
@@ -114,8 +113,7 @@ class CSVDataset(BaseDataset[str]):
         missing_cols = set(self.columns) - set(header)
         if missing_cols:
             raise ValueError(
-                f"Columns {missing_cols} not found in CSV. "
-                f"Available columns: {header}"
+                f"Columns {missing_cols} not found in CSV. " f"Available columns: {header}"
             )
 
         # Build data dictionary with string keys
@@ -164,4 +162,3 @@ class CSVDataset(BaseDataset[str]):
 
         sample = self._data[actual_key]
         return self._apply_transforms(actual_key, sample)
-

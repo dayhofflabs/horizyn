@@ -24,41 +24,49 @@ def mock_data_files():
     with open(train_pairs_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
         writer.writeheader()
-        writer.writerows([
-            {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
-            {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
-            {"pr_id": "3", "reaction_id": "rxn1", "protein_id": "prot2"},
-        ])
+        writer.writerows(
+            [
+                {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
+                {"pr_id": "3", "reaction_id": "rxn1", "protein_id": "prot2"},
+            ]
+        )
 
     # Create mock validation pairs CSV
     val_pairs_path = tmpdir / "val_pairs.csv"
     with open(val_pairs_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
         writer.writeheader()
-        writer.writerows([
-            {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
-            {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
-        ])
+        writer.writerows(
+            [
+                {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
+            ]
+        )
 
     # Create mock training reactions CSV
     train_reactions_path = tmpdir / "train_rxns.csv"
     with open(train_reactions_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
         writer.writeheader()
-        writer.writerows([
-            {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
-            {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
-        ])
+        writer.writerows(
+            [
+                {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
+                {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
+            ]
+        )
 
     # Create mock validation reactions CSV (same reactions for simplicity)
     val_reactions_path = tmpdir / "val_rxns.csv"
     with open(val_reactions_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
         writer.writeheader()
-        writer.writerows([
-            {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
-            {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
-        ])
+        writer.writerows(
+            [
+                {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
+                {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
+            ]
+        )
 
     # Create mock protein embeddings
     protein_embeds_path = tmpdir / "protein_embeds.h5"
@@ -278,10 +286,12 @@ class TestHorizynDataModule:
         with open(val_pairs_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
             writer.writeheader()
-            writer.writerows([
-                {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
-                {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot3"},
-            ])
+            writer.writerows(
+                [
+                    {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                    {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot3"},
+                ]
+            )
 
         # Create new proteins file with val-only protein
         protein_embeds_path = tmpdir / "protein_embeds_extended.h5"
