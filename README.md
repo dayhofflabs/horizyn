@@ -104,7 +104,7 @@ The Horizyn model uses a dual-encoder architecture:
 
 ## Development
 
-See the [User Manual](user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
+See the [User Manual](horizyn-user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
 
 ## Citation
 
@@ -122,21 +122,15 @@ If you use this code in your research, please cite:
 
 ## License
 
-This code is licensed under **CC BY-NC-SA 4.0** (Creative Commons Attribution-NonCommercial-ShareAlike 4.0).
+This code is licensed under **PolyForm Noncommercial License 1.0.0**.
 
-- ✅ **Academic and research use**: Free to use and modify
-- ❌ **Commercial use**: Prohibited without separate licensing
-- 📤 **Sharing**: Derivatives must use the same license
+- ✅ **Noncommercial use**: Free to use and modify for noncommercial purposes
+- ✅ **Research and education**: Permitted for academic, research, and educational purposes
+- ❌ **Commercial use**: Prohibited without separate commercial licensing
 - 📧 **Commercial inquiries**: contact@dayhofflabs.com
 
-See [LICENSE](LICENSE) for full terms.
+See [LICENSE](LICENSE) for full terms or visit https://polyformproject.org/licenses/noncommercial/1.0.0
 
 ## Contributing
 
 This repository is maintained by Dayhoff Labs. For questions or issues, please open a GitHub issue.
-
-## Acknowledgments
-
-- RDKit for molecular fingerprinting
-- DRFP for differential reaction fingerprints
-- PyTorch Lightning for training infrastructure

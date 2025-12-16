@@ -4,13 +4,13 @@ Horizyn: Contrastive Learning for Enzyme-Reaction Matching
 Official implementation of the Horizyn SOTA model for matching enzymatic
 reactions with their catalyzing proteins using contrastive learning.
 
-License: CC BY-NC-SA 4.0
+License: PolyForm Noncommercial License 1.0.0
 Copyright (c) 2025 Dayhoff Labs
 """
 
 __version__ = "0.1.0"
 __author__ = "Dayhoff Labs"
-__license__ = "CC BY-NC-SA 4.0"
+__license__ = "PolyForm-Noncommercial-1.0.0"
 
 from horizyn.config import DotDict, load_config, parse_overrides
 from horizyn.data_module import HorizynDataModule
