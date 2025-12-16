@@ -37,14 +37,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from horizyn.config import load_config
-from horizyn.data_module import HorizynDataModule
 from horizyn.lightning_module import HorizynLitModule
-from horizyn.metrics import (
-    average_precision,
-    mean_reciprocal_rank,
-    r_precision,
-    top_k_hit_rate,
-)
+from horizyn.metrics import average_precision, r_precision, top_k_hit_rate
 
 
 def compute_cosine_distances(
@@ -289,7 +283,6 @@ def evaluate_checkpoint(
             metric_results["top_1000"].append(top_k_hit_rate(scores, target_idx, k=1000).item())
             metric_results["r_precision"].append(r_precision(scores, target_idx).item())
             metric_results["avg_precision"].append(average_precision(scores, target_idx).item())
-            metric_results["mrr"].append(mean_reciprocal_rank(scores, target_idx).item())
 
     # Compute mean metrics
     results = {}
@@ -346,11 +339,6 @@ def format_results_table(results: dict) -> str:
         value = results.get(key, 0.0)
         lines.append(f"{display_name:<20} {value:.4f}         {value * 100:.1f}%")
 
-    lines.append("")
-    lines.append("-" * 70)
-    lines.append("ADDITIONAL METRICS")
-    lines.append("-" * 70)
-    lines.append(f"MRR: {results.get('mrr', 0.0):.4f}")
     lines.append("")
     lines.append("=" * 70)
 
