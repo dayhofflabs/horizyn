@@ -41,14 +41,14 @@ class CSVDataset(BaseDataset[str]):
 
 | Old Parameter | New Parameter(s) |
 |---------------|------------------|
-| `reactions_path` | `train_reactions_path`, `val_reactions_path` |
+| `reactions_path` | `train_reactions_path`, `test_reactions_path` |
 | `proteins_path` | `protein_embeds_path` |
 
 ### Key Changes
-- Now accepts separate paths for training and validation reactions
+- Now accepts separate paths for training and test reactions
 - Uses `CSVDataset` instead of `SQLDataset` for all tabular data
 - `_create_query_dataset()` now takes `reactions_path` as an argument
-- Training uses `train_reactions_path`, validation uses `val_reactions_path`
+- Training uses `train_reactions_path`, test uses `test_reactions_path`
 
 ---
 
@@ -60,9 +60,9 @@ Updated `validate_config()` to require new data keys:
 ```python
 required_data_keys = [
     "train_pairs_path",
-    "val_pairs_path",
+    "test_pairs_path",
     "train_reactions_path",    # NEW
-    "val_reactions_path",      # NEW
+    "test_reactions_path",      # NEW
     "protein_embeds_path",     # RENAMED from proteins_path
 ]
 ```
@@ -73,10 +73,10 @@ Updated data paths to use CSV format and SOTA directory:
 ```yaml
 data:
   train_pairs_path: data/sota/train_pairs.csv
-  val_pairs_path: data/sota/val_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
   train_reactions_path: data/sota/train_rxns.csv
-  val_reactions_path: data/sota/val_rxns.csv
-  protein_embeds_path: data/sota/protein_embeds.h5
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
 ```
 
 ### `configs/nano.yaml`
@@ -85,10 +85,10 @@ Updated to use the new CSV-based nanodata:
 ```yaml
 data:
   train_pairs_path: data/nanodata/train_pairs.csv
-  val_pairs_path: data/nanodata/val_pairs.csv
+  test_pairs_path: data/nanodata/test_pairs.csv
   train_reactions_path: data/nanodata/train_rxns.csv
-  val_reactions_path: data/nanodata/val_rxns.csv
-  protein_embeds_path: data/nanodata/protein_embeds.h5
+  test_reactions_path: data/nanodata/test_rxns.csv
+  protein_embeds_path: data/nanodata/prots_t5.h5
 ```
 
 ---
@@ -102,16 +102,16 @@ Converted SQLite files to CSV format:
 | Old File | New File(s) |
 |----------|-------------|
 | `train_pairs.db` | `train_pairs.csv` |
-| `val_pairs.db` | `val_pairs.csv` |
-| `reactions.db` | `train_rxns.csv`, `val_rxns.csv` |
-| `proteins_t5_embeddings.h5` | `protein_embeds.h5` |
+| `test_pairs.db` | `test_pairs.csv` |
+| `reactions.db` | `train_rxns.csv`, `test_rxns.csv` |
+| `proteins_t5_embeddings.h5` | `prots_t5.h5` |
 
 Old SQLite files moved to `DELETE_BEFORE_PUBLIC/nanodata_old/`.
 
 ### SOTA Data
 
-Renamed protein embeddings file:
-- `prots_t5.h5` → `protein_embeds.h5`
+Protein embeddings file:
+- `prots_t5.h5` (consistent naming with SOTA dataset convention)
 
 ---
 
@@ -132,7 +132,7 @@ Updated `HorizynDataModule` instantiation to pass new parameters:
 ```python
 data_module = HorizynDataModule(
     train_reactions_path=config.data.train_reactions_path,
-    val_reactions_path=config.data.val_reactions_path,
+    test_reactions_path=config.data.test_reactions_path,
     protein_embeds_path=config.data.protein_embeds_path,
     ...
 )
@@ -145,14 +145,14 @@ data_module = HorizynDataModule(
 ### `data/README.md`
 
 - Updated to document CSV format for pairs and reactions
-- Documented separate `train_rxns.csv` and `val_rxns.csv`
-- Updated protein embeddings filename to `protein_embeds.h5`
+- Documented separate `train_rxns.csv` and `test_rxns.csv`
+- Updated protein embeddings filename to `prots_t5.h5`
 - Added documentation for optional `prots.fasta` file
 
 ### `configs/README.md`
 
 - Updated configuration structure section
-- Documented new `train_reactions_path`, `val_reactions_path`, `protein_embeds_path` keys
+- Documented new `train_reactions_path`, `test_reactions_path`, `protein_embeds_path` keys
 
 ---
 

@@ -60,26 +60,26 @@ class TestStandardizationConfiguration:
         """Test that HorizynDataModule accepts all standardization parameters."""
         # Create minimal test data
         train_pairs_path = tmp_path / "train_pairs.csv"
-        val_pairs_path = tmp_path / "val_pairs.csv"
+        test_pairs_path = tmp_path / "test_pairs.csv"
         train_reactions_path = tmp_path / "train_rxns.csv"
-        val_reactions_path = tmp_path / "val_rxns.csv"
+        test_reactions_path = tmp_path / "test_rxns.csv"
         protein_embeds_path = tmp_path / "protein_embeds.h5"
 
         # Create minimal CSV files
         self._create_minimal_csv_data(
             train_pairs_path,
-            val_pairs_path,
+            test_pairs_path,
             train_reactions_path,
-            val_reactions_path,
+            test_reactions_path,
             protein_embeds_path,
         )
 
         # Test data module initialization with all parameters
         dm = HorizynDataModule(
             train_pairs_path=str(train_pairs_path),
-            val_pairs_path=str(val_pairs_path),
+            test_pairs_path=str(test_pairs_path),
             train_reactions_path=str(train_reactions_path),
-            val_reactions_path=str(val_reactions_path),
+            test_reactions_path=str(test_reactions_path),
             protein_embeds_path=str(protein_embeds_path),
             standardize_reactions=True,
             standardize_hypervalent=True,
@@ -140,25 +140,25 @@ class TestStandardizationConfiguration:
 
         # Create minimal test data
         train_pairs_path = tmp_path / "train_pairs.csv"
-        val_pairs_path = tmp_path / "val_pairs.csv"
+        test_pairs_path = tmp_path / "test_pairs.csv"
         train_reactions_path = tmp_path / "train_rxns.csv"
-        val_reactions_path = tmp_path / "val_rxns.csv"
+        test_reactions_path = tmp_path / "test_rxns.csv"
         protein_embeds_path = tmp_path / "protein_embeds.h5"
 
         self._create_minimal_csv_data(
             train_pairs_path,
-            val_pairs_path,
+            test_pairs_path,
             train_reactions_path,
-            val_reactions_path,
+            test_reactions_path,
             protein_embeds_path,
         )
 
         # Create data module with specific standardization settings
         dm = HorizynDataModule(
             train_pairs_path=str(train_pairs_path),
-            val_pairs_path=str(val_pairs_path),
+            test_pairs_path=str(test_pairs_path),
             train_reactions_path=str(train_reactions_path),
-            val_reactions_path=str(val_reactions_path),
+            test_reactions_path=str(test_reactions_path),
             protein_embeds_path=str(protein_embeds_path),
             standardize_reactions=True,
             standardize_hypervalent=False,  # Custom value
@@ -184,9 +184,9 @@ class TestStandardizationConfiguration:
     def _create_minimal_csv_data(
         self,
         train_pairs_path,
-        val_pairs_path,
+        test_pairs_path,
         train_reactions_path,
-        val_reactions_path,
+        test_reactions_path,
         protein_embeds_path,
     ):
         """Create minimal test CSV data."""
@@ -196,8 +196,8 @@ class TestStandardizationConfiguration:
             writer.writeheader()
             writer.writerow({"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"})
 
-        # Val pairs
-        with open(val_pairs_path, "w", newline="") as f:
+        # Test pairs
+        with open(test_pairs_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
             writer.writeheader()
             writer.writerow({"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"})
@@ -208,8 +208,8 @@ class TestStandardizationConfiguration:
             writer.writeheader()
             writer.writerow({"reaction_id": "rxn1", "reaction_smiles": "CC>>CCO"})
 
-        # Val reactions
-        with open(val_reactions_path, "w", newline="") as f:
+        # Test reactions
+        with open(test_reactions_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
             writer.writeheader()
             writer.writerow({"reaction_id": "rxn1", "reaction_smiles": "CC>>CCO"})

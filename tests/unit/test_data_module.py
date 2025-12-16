@@ -32,9 +32,9 @@ def mock_data_files():
             ]
         )
 
-    # Create mock validation pairs CSV
-    val_pairs_path = tmpdir / "val_pairs.csv"
-    with open(val_pairs_path, "w", newline="") as f:
+    # Create mock test pairs CSV
+    test_pairs_path = tmpdir / "test_pairs.csv"
+    with open(test_pairs_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
         writer.writeheader()
         writer.writerows(
@@ -56,9 +56,9 @@ def mock_data_files():
             ]
         )
 
-    # Create mock validation reactions CSV (same reactions for simplicity)
-    val_reactions_path = tmpdir / "val_rxns.csv"
-    with open(val_reactions_path, "w", newline="") as f:
+    # Create mock test reactions CSV (same reactions for simplicity)
+    test_reactions_path = tmpdir / "test_rxns.csv"
+    with open(test_reactions_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
         writer.writeheader()
         writer.writerows(
@@ -80,9 +80,9 @@ def mock_data_files():
 
     return {
         "train_pairs": str(train_pairs_path),
-        "val_pairs": str(val_pairs_path),
+        "test_pairs": str(test_pairs_path),
         "train_reactions": str(train_reactions_path),
-        "val_reactions": str(val_reactions_path),
+        "test_reactions": str(test_reactions_path),
         "protein_embeds": str(protein_embeds_path),
     }
 
@@ -94,9 +94,9 @@ class TestHorizynDataModule:
         """Test data module initialization."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
@@ -110,9 +110,9 @@ class TestHorizynDataModule:
         """Test data module setup loads data."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
@@ -143,9 +143,9 @@ class TestHorizynDataModule:
         """Test that validation pairs are correctly grouped by query."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
@@ -181,9 +181,9 @@ class TestHorizynDataModule:
         """Test that validation retrieval batches contain query_id."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
             retrieval_batch_size=1,
         )
@@ -210,9 +210,9 @@ class TestHorizynDataModule:
         """Test validation dataloader creation."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
@@ -235,9 +235,9 @@ class TestHorizynDataModule:
         """Test that dataloaders raise error if setup not called."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
@@ -251,9 +251,9 @@ class TestHorizynDataModule:
         """Test that reactions are augmented bidirectionally (Bug 1 fix)."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
@@ -281,9 +281,9 @@ class TestHorizynDataModule:
         # Modify mock data to have val-only proteins
         tmpdir = Path(mock_data_files["train_pairs"]).parent
 
-        # Create new validation pairs with val-only protein
-        val_pairs_path = tmpdir / "val_pairs_extended.csv"
-        with open(val_pairs_path, "w", newline="") as f:
+        # Create new test pairs with test-only protein
+        test_pairs_path = tmpdir / "test_pairs_extended.csv"
+        with open(test_pairs_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
             writer.writeheader()
             writer.writerows(
@@ -303,9 +303,9 @@ class TestHorizynDataModule:
 
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=str(val_pairs_path),
+            test_pairs_path=str(test_pairs_path),
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=str(protein_embeds_path),
         )
 
@@ -344,9 +344,9 @@ class TestHorizynDataModule:
         """Test that reactions are augmented with _f and _r suffixes."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
@@ -373,9 +373,9 @@ class TestHorizynDataModule:
         """Test that training pairs are doubled for bidirectional reactions."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
@@ -396,9 +396,9 @@ class TestHorizynDataModule:
         """Test that validation pairs are doubled for bidirectional reactions."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
+            test_pairs_path=mock_data_files["test_pairs"],
             train_reactions_path=mock_data_files["train_reactions"],
-            val_reactions_path=mock_data_files["val_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
             protein_embeds_path=mock_data_files["protein_embeds"],
         )
 

@@ -574,10 +574,11 @@ logging:
 **2. Data**:
 ```yaml
 data:
-  train_pairs_path: data/swissprot/train_pairs.db
-  val_pairs_path: data/swissprot/val_pairs.db
-  reactions_path: data/swissprot/reactions.db
-  proteins_path: data/swissprot/proteins_t5_embeddings.h5
+  train_pairs_path: data/sota/train_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
+  train_reactions_path: data/sota/train_rxns.csv
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
   train_batch_size: 16384
   retrieval_batch_size: 128
   
@@ -643,49 +644,53 @@ Override syntax supports:
 
 ### Data Format
 
-Horizyn expects four files:
+Horizyn expects five CSV/HDF5 files:
 
-#### 1. Training Pairs (`train_pairs.db`)
+#### 1. Training Pairs (`train_pairs.csv`)
 
-SQLite database with table `protein_to_reaction`:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| pr_id | INTEGER | Unique pair ID |
-| reaction_id | TEXT | Reaction identifier |
-| protein_id | TEXT | Protein identifier |
-
-#### 2. Validation Pairs (`val_pairs.db`)
-
-Same schema as training pairs, disjoint set for validation.
-
-#### 3. Reactions (`reactions.db`)
-
-SQLite database with table `reaction`:
+CSV file with columns:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| reaction_id | TEXT | Unique reaction ID |
-| smiles | TEXT | Reaction SMILES string |
+| pr_id | STRING | Unique pair ID |
+| reaction_id | STRING | Reaction identifier |
+| protein_id | STRING | Protein identifier |
+
+#### 2. Test Pairs (`test_pairs.csv`)
+
+Same schema as training pairs, disjoint set for testing.
+
+#### 3. Training Reactions (`train_rxns.csv`)
+
+CSV file with columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| reaction_id | STRING | Unique reaction ID |
+| reaction_smiles | STRING | Reaction SMILES string |
 
 Format: `reactants>>products` (e.g., `CC(=O)O>>CO.CC(=O)`)
 
-#### 4. Protein Embeddings (`proteins_t5_embeddings.h5`)
+#### 4. Test Reactions (`test_rxns.csv`)
+
+Same schema as training reactions, disjoint set for testing.
+
+#### 5. Protein Embeddings (`prots_t5.h5`)
 
 HDF5 file with two datasets:
 
 - `ids`: Array of protein IDs (strings or bytes)
-- `embeddings`: Array of shape (N, 1024) with T5 embeddings
+- `vectors`: Array of shape (N, 1024) with T5 embeddings
 
-**Key Requirement**: IDs in pairs files must match IDs in reactions.db and proteins.h5.
+**Key Requirement**: IDs in pairs files must match IDs in reactions CSV files and prots_t5.h5.
 
 ### Memory Requirements
 
-For SwissProt dataset (with bidirectional augmentation):
-- **Training pairs**: ~200K pairs (doubled) → ~2 MB
-- **Validation pairs**: ~40K pairs (doubled) → ~400 KB
-- **Reactions**: ~100K reactions (doubled: forward + backward) → ~100 MB (SMILES strings)
-- **Protein embeddings**: ~500K proteins × 1024 floats → ~2 GB
+For SOTA dataset (with bidirectional augmentation):
+- **Training pairs**: ~257K pairs (doubled) → ~5 MB
+- **Test pairs**: ~34K pairs (doubled) → ~700 KB
+- **Reactions**: ~11K reactions (doubled: forward + backward) → ~3 MB (SMILES strings)
+- **Protein embeddings**: ~200K proteins × 1024 floats → ~900 MB
 - **RDKit+ fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
 - **DRFP fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
 
@@ -875,10 +880,11 @@ python train.py --config configs/sota.yaml --training.learning_rate 0.0005
 
 ```yaml
 data:
-  train_pairs_path: path/to/your/train_pairs.db
-  val_pairs_path: path/to/your/val_pairs.db
-  reactions_path: path/to/your/reactions.db
-  proteins_path: path/to/your/proteins.h5
+  train_pairs_path: path/to/your/train_pairs.csv
+  test_pairs_path: path/to/your/test_pairs.csv
+  train_reactions_path: path/to/your/train_rxns.csv
+  test_reactions_path: path/to/your/test_rxns.csv
+  protein_embeds_path: path/to/your/prots_t5.h5
 ```
 
 3. **Train**:

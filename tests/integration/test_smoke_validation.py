@@ -375,7 +375,7 @@ class TestScreeningSet:
         )
 
         val_pairs = CSVDataset(
-            file_path=config.data.val_pairs_path,
+            file_path=config.data.test_pairs_path,
             key_column="pr_id",
             columns=["protein_id"],
         )
@@ -427,7 +427,7 @@ class TestScreeningSet:
         )
 
         val_pairs = CSVDataset(
-            file_path=config.data.val_pairs_path,
+            file_path=config.data.test_pairs_path,
             key_column="pr_id",
             columns=["protein_id"],
         )

@@ -16,10 +16,10 @@ data:
   # Paths to pre-split datasets (relative to project root)
   # Full published dataset for SOTA training
   train_pairs_path: data/sota/train_pairs.csv
-  val_pairs_path: data/sota/val_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
   train_reactions_path: data/sota/train_rxns.csv
-  val_reactions_path: data/sota/val_rxns.csv
-  protein_embeds_path: data/sota/protein_embeds.h5
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)

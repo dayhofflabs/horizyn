@@ -16,10 +16,10 @@ data:
   # Paths to pre-split datasets (relative to project root)
   # Nanodata for fast integration testing
   train_pairs_path: data/nanodata/train_pairs.csv
-  val_pairs_path: data/nanodata/val_pairs.csv
+  test_pairs_path: data/nanodata/test_pairs.csv
   train_reactions_path: data/nanodata/train_rxns.csv
-  val_reactions_path: data/nanodata/val_rxns.csv
-  protein_embeds_path: data/nanodata/protein_embeds.h5
+  test_reactions_path: data/nanodata/test_rxns.csv
+  protein_embeds_path: data/nanodata/prots_t5.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)

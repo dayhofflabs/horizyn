@@ -23,10 +23,10 @@ def check_sota_data():
     sota_dir = Path("data/sota")
     required_files = [
         "train_rxns.csv",
-        "val_rxns.csv",
-        "protein_embeds.h5",
+        "test_rxns.csv",
+        "prots_t5.h5",
         "train_pairs.csv",
-        "val_pairs.csv",
+        "test_pairs.csv",
     ]
 
     for filename in required_files:
@@ -64,18 +64,18 @@ class TestSOTAFast:
         # Verify paths point to sota
         data_cfg = config["data"]
         assert "sota" in data_cfg["train_reactions_path"]
-        assert "sota" in data_cfg["val_reactions_path"]
+        assert "sota" in data_cfg["test_reactions_path"]
         assert "sota" in data_cfg["protein_embeds_path"]
         assert "sota" in data_cfg["train_pairs_path"]
-        assert "sota" in data_cfg["val_pairs_path"]
+        assert "sota" in data_cfg["test_pairs_path"]
 
         # Verify all files exist
         for key in [
             "train_reactions_path",
-            "val_reactions_path",
+            "test_reactions_path",
             "protein_embeds_path",
             "train_pairs_path",
-            "val_pairs_path",
+            "test_pairs_path",
         ]:
             filepath = Path(data_cfg[key])
             assert filepath.exists(), f"Missing SOTA file: {filepath}"
@@ -85,10 +85,10 @@ class TestSOTAFast:
         sota_dir = Path("data/sota")
         required_files = [
             "train_rxns.csv",
-            "val_rxns.csv",
-            "protein_embeds.h5",
+            "test_rxns.csv",
+            "prots_t5.h5",
             "train_pairs.csv",
-            "val_pairs.csv",
+            "test_pairs.csv",
         ]
 
         for filename in required_files:
@@ -148,19 +148,19 @@ class TestSOTAFast:
                 200_000 < train_count < 300_000
             ), f"Training pairs count {train_count} outside expected range (200k-300k)"
 
-        # Check validation pairs count
-        val_pairs_csv = Path("data/sota/val_pairs.csv")
-        with open(val_pairs_csv, newline="") as f:
+        # Check test pairs count
+        test_pairs_csv = Path("data/sota/test_pairs.csv")
+        with open(test_pairs_csv, newline="") as f:
             reader = csv.DictReader(f)
-            val_count = sum(1 for _ in reader)
+            test_count = sum(1 for _ in reader)
 
-            # SOTA has ~36k validation pairs
+            # SOTA has ~36k test pairs
             assert (
-                30_000 < val_count < 50_000
-            ), f"Validation pairs count {val_count} outside expected range (30k-50k)"
+                30_000 < test_count < 50_000
+            ), f"Test pairs count {test_count} outside expected range (30k-50k)"
 
         # Check protein embeddings count
-        proteins_h5 = Path("data/sota/protein_embeds.h5")
+        proteins_h5 = Path("data/sota/prots_t5.h5")
         with h5py.File(str(proteins_h5), "r") as f:
             assert "ids" in f, "ids dataset not found in HDF5"
             assert "vectors" in f, "vectors dataset not found in HDF5"

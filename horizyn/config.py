@@ -166,9 +166,9 @@ def validate_config(config: DotDict) -> None:
     # Validate data section
     required_data_keys = [
         "train_pairs_path",
-        "val_pairs_path",
+        "test_pairs_path",
         "train_reactions_path",
-        "val_reactions_path",
+        "test_reactions_path",
         "protein_embeds_path",
     ]
     for key in required_data_keys:

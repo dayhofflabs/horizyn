@@ -40,9 +40,9 @@ class HorizynDataModule(pl.LightningDataModule):
 
     Args:
         train_pairs_path: Path to training pairs CSV file.
-        val_pairs_path: Path to validation pairs CSV file.
+        test_pairs_path: Path to test pairs CSV file.
         train_reactions_path: Path to training reactions CSV file.
-        val_reactions_path: Path to validation reactions CSV file.
+        test_reactions_path: Path to test reactions CSV file.
         protein_embeds_path: Path to protein embeddings HDF5 file.
         train_batch_size: Batch size for training. Defaults to 16384.
         retrieval_batch_size: Batch size for retrieval metrics. Defaults to 128.
@@ -60,10 +60,10 @@ class HorizynDataModule(pl.LightningDataModule):
     Example:
         >>> dm = HorizynDataModule(
         ...     train_pairs_path="data/sota/train_pairs.csv",
-        ...     val_pairs_path="data/sota/val_pairs.csv",
+        ...     test_pairs_path="data/sota/test_pairs.csv",
         ...     train_reactions_path="data/sota/train_rxns.csv",
-        ...     val_reactions_path="data/sota/val_rxns.csv",
-        ...     protein_embeds_path="data/sota/protein_embeds.h5",
+        ...     test_reactions_path="data/sota/test_rxns.csv",
+        ...     protein_embeds_path="data/sota/prots_t5.h5",
         ... )
         >>> dm.setup("fit")
         >>> train_loader = dm.train_dataloader()
@@ -73,9 +73,9 @@ class HorizynDataModule(pl.LightningDataModule):
     def __init__(
         self,
         train_pairs_path: str,
-        val_pairs_path: str,
+        test_pairs_path: str,
         train_reactions_path: str,
-        val_reactions_path: str,
+        test_reactions_path: str,
         protein_embeds_path: str,
         train_batch_size: int = 16384,
         retrieval_batch_size: int = 128,
@@ -95,9 +95,9 @@ class HorizynDataModule(pl.LightningDataModule):
 
         # Store paths
         self.train_pairs_path = Path(train_pairs_path)
-        self.val_pairs_path = Path(val_pairs_path)
+        self.test_pairs_path = Path(test_pairs_path)
         self.train_reactions_path = Path(train_reactions_path)
-        self.val_reactions_path = Path(val_reactions_path)
+        self.test_reactions_path = Path(test_reactions_path)
         self.protein_embeds_path = Path(protein_embeds_path)
 
         # Batch sizes
@@ -230,7 +230,7 @@ class HorizynDataModule(pl.LightningDataModule):
 
         # Load validation pairs
         val_pairs = CSVDataset(
-            file_path=str(self.val_pairs_path),
+            file_path=str(self.test_pairs_path),
             key_column="pr_id",
             columns=["reaction_id", "protein_id"],
             rename_map={"reaction_id": "query_id", "protein_id": "target_id"},
@@ -242,9 +242,9 @@ class HorizynDataModule(pl.LightningDataModule):
         val_pairs = self._augment_pairs_bidirectional(val_pairs)
         print(f"  Augmented to {len(val_pairs)} bidirectional pairs")
 
-        # Load validation query data (val reactions with fingerprints)
-        self._val_query_data_raw = self._create_query_dataset(self.val_reactions_path)
-        print(f"  Loaded {len(self._val_query_data_raw)} val reactions")
+        # Load validation query data (test reactions with fingerprints)
+        self._val_query_data_raw = self._create_query_dataset(self.test_reactions_path)
+        print(f"  Loaded {len(self._val_query_data_raw)} test reactions")
 
         # Ensure target data is loaded
         if self._target_data is None:

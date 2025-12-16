@@ -122,9 +122,9 @@ def main():
     try:
         data_module = HorizynDataModule(
             train_pairs_path=config.data.train_pairs_path,
-            val_pairs_path=config.data.val_pairs_path,
+            test_pairs_path=config.data.test_pairs_path,
             train_reactions_path=config.data.train_reactions_path,
-            val_reactions_path=config.data.val_reactions_path,
+            test_reactions_path=config.data.test_reactions_path,
             protein_embeds_path=config.data.protein_embeds_path,
             train_batch_size=config.data.train_batch_size,
             retrieval_batch_size=config.data.retrieval_batch_size,

@@ -54,10 +54,10 @@ class TestSmokeNanodata:
         # Check data paths point to nanodata
         data_cfg = config["data"]
         assert "nanodata" in data_cfg["train_reactions_path"]
-        assert "nanodata" in data_cfg["val_reactions_path"]
+        assert "nanodata" in data_cfg["test_reactions_path"]
         assert "nanodata" in data_cfg["protein_embeds_path"]
         assert "nanodata" in data_cfg["train_pairs_path"]
-        assert "nanodata" in data_cfg["val_pairs_path"]
+        assert "nanodata" in data_cfg["test_pairs_path"]
 
     def test_nanodata_files_exist(self):
         """Test that all nanodata files are present."""
@@ -66,10 +66,10 @@ class TestSmokeNanodata:
 
         required_files = [
             "train_rxns.csv",
-            "val_rxns.csv",
-            "protein_embeds.h5",
+            "test_rxns.csv",
+            "prots_t5.h5",
             "train_pairs.csv",
-            "val_pairs.csv",
+            "test_pairs.csv",
         ]
 
         for filename in required_files:

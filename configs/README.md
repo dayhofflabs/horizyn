@@ -69,10 +69,10 @@ All configuration files follow this structure:
 # Data configuration
 data:
   train_pairs_path: "path/to/train_pairs.csv"       # Training pairs CSV
-  val_pairs_path: "path/to/val_pairs.csv"           # Validation pairs CSV
-  train_reactions_path: "path/to/train_rxns.csv"             # Training reactions CSV
-  val_reactions_path: "path/to/val_rxns.csv"                 # Validation reactions CSV
-  protein_embeds_path: "path/to/protein_embeds.h5"         # HDF5 with T5 embeddings
+  test_pairs_path: "path/to/test_pairs.csv"         # Test pairs CSV
+  train_reactions_path: "path/to/train_rxns.csv"    # Training reactions CSV
+  test_reactions_path: "path/to/test_rxns.csv"      # Test reactions CSV
+  protein_embeds_path: "path/to/prots_t5.h5"        # HDF5 with T5 embeddings
   
   # Reaction fingerprint dimensions
   rdkit_fp_dim: 1024                                 # RDKit+ fingerprint dimension
@@ -167,10 +167,10 @@ To create a new configuration:
    ```yaml
    data:
      train_pairs_path: "data/my_dataset/train_pairs.csv"
-     val_pairs_path: "data/my_dataset/val_pairs.csv"
+     test_pairs_path: "data/my_dataset/test_pairs.csv"
      train_reactions_path: "data/my_dataset/train_rxns.csv"
-     val_reactions_path: "data/my_dataset/val_rxns.csv"
-     protein_embeds_path: "data/my_dataset/protein_embeds.h5"
+     test_reactions_path: "data/my_dataset/test_rxns.csv"
+     protein_embeds_path: "data/my_dataset/prots_t5.h5"
    ```
 
 3. **Adjust hyperparameters** as needed:

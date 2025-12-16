@@ -184,9 +184,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
@@ -206,9 +206,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 # Missing 'model' section
@@ -243,9 +243,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
@@ -265,9 +265,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
@@ -287,9 +287,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
@@ -309,9 +309,9 @@ class TestValidateConfig:
             {
                 "data": {
                     "train_pairs_path": "data/train_pairs.csv",
-                    "val_pairs_path": "data/val_pairs.csv",
+                    "test_pairs_path": "data/test_pairs.csv",
                     "train_reactions_path": "data/train_rxns.csv",
-                    "val_reactions_path": "data/val_rxns.csv",
+                    "test_reactions_path": "data/test_rxns.csv",
                     "protein_embeds_path": "data/protein_embeds.h5",
                 },
                 "model": {
