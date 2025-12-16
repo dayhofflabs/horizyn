@@ -5,7 +5,8 @@ This module implements common information retrieval metrics used to evaluate
 dual-encoder models on protein-reaction retrieval tasks.
 """
 
-from typing import Callable, Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
+
 import torch
 from torch import Tensor
 
@@ -372,9 +373,150 @@ def negative_score(scores: Tensor, target_idx: Tensor) -> Tensor:
     return neg_scores.mean()
 
 
+def r_precision(scores: Tensor, target_idx: Tensor) -> Tensor:
+    """
+    Compute R-precision.
+
+    R-precision is the precision at rank R, where R is the number of relevant
+    documents. It measures the fraction of relevant items in the top-R
+    retrieved items.
+
+    For a query with R relevant documents, R-precision = (number of relevant
+    documents in top-R) / R.
+
+    Args:
+        scores: Prediction scores of shape (num_items,). Higher scores indicate
+            higher relevance/similarity.
+        target_idx: Indices of relevant items, shape (num_targets,). Should be
+            padded with -1 for unused positions.
+
+    Returns:
+        Tensor containing R-precision value. Returns 0.0 if no relevant items.
+
+    Example:
+        >>> scores = torch.tensor([0.1, 0.9, 0.3, 0.8, 0.2])
+        >>> target_idx = torch.tensor([2, 4, -1])  # 2 relevant items at indices 2 and 4
+        >>> r_precision(scores, target_idx)
+        tensor(0.5)  # Top-2 are indices [1, 3], only 0 relevant → but wait...
+        # Actually top-2 by score are [1 (0.9), 3 (0.8)], neither is in [2, 4]
+        # So R-precision = 0/2 = 0.0
+    """
+    if scores.dim() != 1 or target_idx.dim() != 1:
+        raise ValueError(
+            "r_precision expects 1D tensors. "
+            f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
+        )
+
+    # Filter out padding (-1)
+    valid_targets = target_idx[target_idx >= 0]
+
+    if len(valid_targets) == 0:
+        return torch.tensor(0.0, device=scores.device)
+
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+
+    num_items = scores.shape[0]
+    if int(valid_targets.max().item()) >= num_items:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+        )
+
+    # R = number of relevant documents
+    r = len(valid_targets)
+
+    # Clamp R to number of items
+    r_clamped = min(r, num_items)
+
+    # Get indices of top-R predictions
+    top_r_indices = torch.topk(scores, k=r_clamped, largest=True).indices
+
+    # Count how many relevant items are in top-R
+    hits = torch.isin(top_r_indices, valid_targets).sum().float()
+
+    return hits / r
+
+
+def average_precision(scores: Tensor, target_idx: Tensor) -> Tensor:
+    """
+    Compute Average Precision (AP).
+
+    Average Precision is the average of precision values computed at each
+    position where a relevant document is retrieved. It rewards both
+    retrieving relevant documents and ranking them highly.
+
+    AP = (1/R) * sum_{k=1}^{n} (P(k) * rel(k))
+
+    where:
+    - R is the number of relevant documents
+    - n is the total number of items
+    - P(k) is the precision at rank k
+    - rel(k) is 1 if item at rank k is relevant, 0 otherwise
+
+    Args:
+        scores: Prediction scores of shape (num_items,). Higher scores indicate
+            higher relevance/similarity.
+        target_idx: Indices of relevant items, shape (num_targets,). Should be
+            padded with -1 for unused positions.
+
+    Returns:
+        Tensor containing Average Precision value. Returns 0.0 if no relevant items.
+
+    Example:
+        >>> scores = torch.tensor([0.5, 0.9, 0.3, 0.8, 0.2])
+        >>> target_idx = torch.tensor([1, 3, -1])  # Relevant: indices 1 and 3
+        >>> average_precision(scores, target_idx)
+        tensor(1.0)  # Top-2 are [1, 3], both relevant: P@1=1, P@2=1 → AP=(1+1)/2=1.0
+    """
+    if scores.dim() != 1 or target_idx.dim() != 1:
+        raise ValueError(
+            "average_precision expects 1D tensors. "
+            f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
+        )
+
+    # Filter out padding (-1)
+    valid_targets = target_idx[target_idx >= 0]
+
+    if len(valid_targets) == 0:
+        return torch.tensor(0.0, device=scores.device)
+
+    if valid_targets.dtype != torch.long:
+        raise ValueError("target_idx must be dtype torch.long")
+
+    num_items = scores.shape[0]
+    if int(valid_targets.max().item()) >= num_items:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+        )
+
+    # Get sorted indices (descending order of scores)
+    sorted_indices = torch.argsort(scores, descending=True)
+
+    # Create a relevance mask for the sorted order
+    # For each position in the ranked list, check if it's a relevant item
+    relevance = torch.isin(sorted_indices, valid_targets)
+
+    # Compute cumulative sum of relevant items at each position
+    cum_relevant = torch.cumsum(relevance.float(), dim=0)
+
+    # Compute precision at each position (positions are 1-indexed)
+    positions = torch.arange(1, num_items + 1, device=scores.device, dtype=torch.float)
+    precisions = cum_relevant / positions
+
+    # Average Precision: mean of precisions at positions where relevant items occur
+    # Only sum precisions where relevance is True
+    ap_sum = (precisions * relevance.float()).sum()
+
+    # Divide by number of relevant items
+    num_relevant = len(valid_targets)
+    return ap_sum / num_relevant
+
+
 def create_retrieval_metrics(
     top_k: Optional[List[int]] = None,
     include_mrr: bool = True,
+    include_r_precision: bool = False,
+    include_avg_precision: bool = False,
     pos_score: bool = False,
     neg_score: bool = False,
 ) -> Dict[str, RetrievalMetric]:
@@ -388,6 +530,8 @@ def create_retrieval_metrics(
         top_k: List of k values for Top-K hit rate metrics. If None, defaults
             to [1, 10, 100, 1000]. Defaults to None.
         include_mrr: Whether to include Mean Reciprocal Rank metric. Defaults to True.
+        include_r_precision: Whether to include R-precision metric. Defaults to False.
+        include_avg_precision: Whether to include Average Precision metric. Defaults to False.
         pos_score: Whether to include mean positive score metric. Defaults to False.
         neg_score: Whether to include mean negative score metric. Defaults to False.
 
@@ -395,6 +539,8 @@ def create_retrieval_metrics(
         Dictionary mapping metric names to RetrievalMetric instances:
             - f"top_{k}": Top-K hit rate for each k value
             - "mrr": Mean Reciprocal Rank (if include_mrr=True)
+            - "r_precision": R-precision (if include_r_precision=True)
+            - "avg_precision": Average Precision (if include_avg_precision=True)
             - "pos_score": Mean score of positive items (if pos_score=True)
             - "neg_score": Mean score of negative items (if neg_score=True)
 
@@ -403,6 +549,8 @@ def create_retrieval_metrics(
         >>> metrics = create_retrieval_metrics(
         ...     top_k=[1, 10, 100, 1000],
         ...     include_mrr=True,
+        ...     include_r_precision=True,
+        ...     include_avg_precision=True,
         ...     pos_score=True,
         ...     neg_score=True
         ... )
@@ -429,6 +577,20 @@ def create_retrieval_metrics(
     if include_mrr:
         metrics["mrr"] = RetrievalMetric(
             metric_functional=mean_reciprocal_rank,
+            reduction="mean",
+        )
+
+    # R-precision
+    if include_r_precision:
+        metrics["r_precision"] = RetrievalMetric(
+            metric_functional=r_precision,
+            reduction="mean",
+        )
+
+    # Average Precision
+    if include_avg_precision:
+        metrics["avg_precision"] = RetrievalMetric(
+            metric_functional=average_precision,
             reduction="mean",
         )
 
