@@ -517,8 +517,6 @@ def create_retrieval_metrics(
     include_mrr: bool = True,
     include_r_precision: bool = False,
     include_avg_precision: bool = False,
-    pos_score: bool = False,
-    neg_score: bool = False,
 ) -> Dict[str, RetrievalMetric]:
     """
     Create a dictionary of retrieval metrics for evaluation.
@@ -532,8 +530,6 @@ def create_retrieval_metrics(
         include_mrr: Whether to include Mean Reciprocal Rank metric. Defaults to True.
         include_r_precision: Whether to include R-precision metric. Defaults to False.
         include_avg_precision: Whether to include Average Precision metric. Defaults to False.
-        pos_score: Whether to include mean positive score metric. Defaults to False.
-        neg_score: Whether to include mean negative score metric. Defaults to False.
 
     Returns:
         Dictionary mapping metric names to RetrievalMetric instances:
@@ -541,8 +537,6 @@ def create_retrieval_metrics(
             - "mrr": Mean Reciprocal Rank (if include_mrr=True)
             - "r_precision": R-precision (if include_r_precision=True)
             - "avg_precision": Average Precision (if include_avg_precision=True)
-            - "pos_score": Mean score of positive items (if pos_score=True)
-            - "neg_score": Mean score of negative items (if neg_score=True)
 
     Example:
         >>> # Create metrics matching SOTA config
@@ -551,8 +545,6 @@ def create_retrieval_metrics(
         ...     include_mrr=True,
         ...     include_r_precision=True,
         ...     include_avg_precision=True,
-        ...     pos_score=True,
-        ...     neg_score=True
         ... )
         >>> # Use with predictions
         >>> scores = torch.randn(128, 1000)  # 128 queries, 1000 targets
@@ -591,19 +583,6 @@ def create_retrieval_metrics(
     if include_avg_precision:
         metrics["avg_precision"] = RetrievalMetric(
             metric_functional=average_precision,
-            reduction="mean",
-        )
-
-    # Positive/negative score metrics
-    if pos_score:
-        metrics["pos_score"] = RetrievalMetric(
-            metric_functional=positive_score,
-            reduction="mean",
-        )
-
-    if neg_score:
-        metrics["neg_score"] = RetrievalMetric(
-            metric_functional=negative_score,
             reduction="mean",
         )
 

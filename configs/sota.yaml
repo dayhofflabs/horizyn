@@ -77,8 +77,6 @@ training:
   # Retrieval metrics
   metrics:
     top_k: [1, 10, 100, 1000]  # Top-K hit rates to compute
-    pos_score: true            # Log positive pair scores
-    neg_score: true            # Log negative pair scores
 
   # Validation
   check_val_every_n_epoch: 10  # Run validation every N epochs

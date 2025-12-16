@@ -64,8 +64,6 @@ class HorizynLitModule(pl.LightningModule):
         learning_rate: float = 1e-4,
         weight_decay: float = 0.01,
         metric_ks: List[int] = [1, 5, 10, 50],
-        pos_score: bool = False,
-        neg_score: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -127,7 +125,7 @@ class HorizynLitModule(pl.LightningModule):
 
         # Metrics
         self.metric_functionals = create_retrieval_metrics(
-            top_k=metric_ks, include_mrr=True, pos_score=pos_score, neg_score=neg_score
+            top_k=metric_ks, include_mrr=True
         )
 
         # Target lookup table for validation retrieval metrics

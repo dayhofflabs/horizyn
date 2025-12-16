@@ -720,8 +720,6 @@ class TestCreateRetrievalMetrics:
         assert "top_100" in metrics
         assert "top_1000" in metrics
         assert "mrr" in metrics
-        assert "pos_score" not in metrics
-        assert "neg_score" not in metrics
 
     def test_custom_top_k(self):
         """Test with custom top_k values."""
@@ -738,23 +736,14 @@ class TestCreateRetrievalMetrics:
         assert "mrr" not in metrics
         assert "top_1" in metrics
 
-    def test_with_pos_neg_scores(self):
-        """Test including pos/neg score metrics."""
-        metrics = create_retrieval_metrics(pos_score=True, neg_score=True)
-
-        assert "pos_score" in metrics
-        assert "neg_score" in metrics
-
     def test_sota_configuration(self):
         """Test with SOTA config parameters."""
         metrics = create_retrieval_metrics(
             top_k=[1, 10, 100, 1000],
             include_mrr=True,
-            pos_score=True,
-            neg_score=True,
         )
 
-        assert len(metrics) == 7  # 4 top_k + mrr + pos + neg
+        assert len(metrics) == 5  # 4 top_k + mrr
         assert all(isinstance(m, RetrievalMetric) for m in metrics.values())
 
     def test_with_r_precision(self):
@@ -778,8 +767,6 @@ class TestCreateRetrievalMetrics:
             include_mrr=True,
             include_r_precision=True,
             include_avg_precision=True,
-            pos_score=False,
-            neg_score=False,
         )
 
         assert len(metrics) == 7  # 4 top_k + mrr + r_precision + avg_precision
@@ -850,7 +837,14 @@ class TestMetricsDevicePlacement:
         assert result.device.type == device.type
 
     def test_average_precision_device(self, device):
-        """Test average_precision works on both CPU and GPU."""
+        """Test average_precision works on both CPU and GPU.
+        
+        Note: cumsum doesn't have a deterministic CUDA implementation,
+        so we skip CUDA when deterministic mode is enabled.
+        """
+        if device.type == "cuda" and torch.are_deterministic_algorithms_enabled():
+            pytest.skip("cumsum_cuda doesn't support deterministic mode")
+        
         scores = torch.tensor([0.1, 0.9, 0.3, 0.8, 0.2]).to(device)
         target_idx = torch.tensor([1, 3, -1]).to(device)
 

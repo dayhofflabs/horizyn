@@ -157,8 +157,6 @@ def main():
         beta=config.training.loss.beta,
         learn_beta=config.training.loss.get("learn_beta", False),
         metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
-        pos_score=config.training.metrics.get("pos_score", False),
-        neg_score=config.training.metrics.get("neg_score", False),
     )
 
     # Count parameters
