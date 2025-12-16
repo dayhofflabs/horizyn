@@ -120,3 +120,7 @@ temp/
 
 # UV lock file (keep for reproducibility)
 # uv.lock
+
+/scratch/**
+!/scratch/**/
+!/scratch/**/.gitkeep
