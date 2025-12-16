@@ -90,9 +90,7 @@ class TestHypervalentStandardizer:
     def test_standardize_reaction(self):
         """Test standardization of a reaction."""
         standardizer = HypervalentStandardizer()
-        result = standardizer.standardize_reaction(
-            "O=[Cl:1](=O)O.[H][H]>>O=[Cl:1]O.O"
-        )
+        result = standardizer.standardize_reaction("O=[Cl:1](=O)O.[H][H]>>O=[Cl:1]O.O")
         assert result == "[H][H].[O-][Cl+2:1]([O-])O>>O.[O-][Cl+:1]O"
 
     def test_standardize_invalid_smiles(self):
@@ -128,12 +126,18 @@ class TestRemoveHsStandardizer:
     def test_aromatic_benzene_explicit_h(self):
         """Test removal of explicit H from aromatic benzene."""
         standardizer = RemoveHsStandardizer()
-        assert standardizer.standardize_molecule("c([H])1c([H])c([H])c([H])c([H])c([H])1") == "c1ccccc1"
+        assert (
+            standardizer.standardize_molecule("c([H])1c([H])c([H])c([H])c([H])c([H])1")
+            == "c1ccccc1"
+        )
 
     def test_kekulized_benzene_explicit_h(self):
         """Test removal of explicit H from kekulized benzene."""
         standardizer = RemoveHsStandardizer()
-        assert standardizer.standardize_molecule("C([H])1=C([H])C([H])=C([H])C([H])=C([H])1") == "C1=CC=CC=C1"
+        assert (
+            standardizer.standardize_molecule("C([H])1=C([H])C([H])=C([H])C([H])=C([H])1")
+            == "C1=CC=CC=C1"
+        )
 
     def test_hypervalent_unchanged(self):
         """Test that hypervalent structure is unchanged."""
@@ -569,7 +573,10 @@ class TestStandardizer:
     def test_default_standardizer_benzene(self):
         """Test default standardizer with benzene."""
         standardizer = Standardizer()
-        assert standardizer.standardize_molecule("C([H])1=C([H])C([H])=C([H])C([H])=C([H])1") == "C1=CC=CC=C1"
+        assert (
+            standardizer.standardize_molecule("C([H])1=C([H])C([H])=C([H])C([H])=C([H])1")
+            == "C1=CC=CC=C1"
+        )
 
     def test_default_standardizer_pyridine(self):
         """Test default standardizer leaves aromatic pyridine aromatic."""
