@@ -38,10 +38,10 @@ pip install -e .
 
 ### Download Dataset
 
-Download the pre-split SwissProt dataset (~15GB):
+Download the SOTA dataset (~1GB):
 
 ```bash
-python scripts/download_data.py --output_dir data/
+python scripts/download_data.py
 ```
 
 ### Train the Model
@@ -54,7 +54,7 @@ python train.py --config configs/sota.yaml
 
 ## Hardware Requirements
 
-- **RAM**: 16GB minimum (15GB for data loaded entirely in memory)
+- **RAM**: 8GB minimum (4GB for data loaded entirely in memory)
 - **GPU**: Single NVIDIA GPU with 16GB+ VRAM (e.g., T4, A10G, V100)
 - **Disk**: 20GB free space for dataset and checkpoints
 - **Platform**: Linux x86_64 with CUDA 12.1
@@ -73,7 +73,7 @@ horizyn/
 │   ├── datasets/              # Dataset classes
 │   │   ├── base.py           # Base dataset abstractions
 │   │   ├── collection.py     # Dataset composition utilities
-│   │   ├── sql.py            # SQLite dataset loader
+│   │   ├── csv.py            # CSV dataset loader
 │   │   ├── hdf5.py           # HDF5 embedding loader
 │   │   ├── transform.py      # Data transformations
 │   │   └── fingerprints/     # Chemical fingerprint generation

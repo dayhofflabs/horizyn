@@ -6,7 +6,7 @@ operations like fingerprint computation or full training runs. All tests complet
 in < 5 seconds and are included in default test runs.
 
 Run tests:
-    pytest tests/integration/test_swissprot.py -v
+    pytest tests/integration/test_sota.py -v
 """
 
 from pathlib import Path
@@ -47,7 +47,7 @@ class TestSOTAFast:
     each and are included in default test runs.
     """
 
-    def test_swissprot_config_is_valid(self, check_sota_data):
+    def test_sota_config_is_valid(self, check_sota_data):
         """Test that sota.yaml config is valid and points to SOTA data."""
         config_path = Path("configs/sota.yaml")
         assert config_path.exists(), "sota.yaml config not found"
@@ -80,7 +80,7 @@ class TestSOTAFast:
             filepath = Path(data_cfg[key])
             assert filepath.exists(), f"Missing SOTA file: {filepath}"
 
-    def test_swissprot_files_exist_and_not_empty(self, check_sota_data):
+    def test_sota_files_exist_and_not_empty(self, check_sota_data):
         """Test that all SOTA files exist and are not empty."""
         sota_dir = Path("data/sota")
         required_files = [
@@ -96,7 +96,7 @@ class TestSOTAFast:
             assert filepath.exists(), f"Missing file: {filename}"
             assert filepath.stat().st_size > 0, f"Empty file: {filename}"
 
-    def test_swissprot_csv_schemas(self, check_sota_data):
+    def test_sota_csv_schemas(self, check_sota_data):
         """
         Test that SOTA CSV files have expected schemas.
 
@@ -126,7 +126,7 @@ class TestSOTAFast:
             assert "reaction_id" in fieldnames
             assert "protein_id" in fieldnames
 
-    def test_swissprot_dataset_sizes(self, check_sota_data):
+    def test_sota_dataset_sizes(self, check_sota_data):
         """
         Test that SOTA datasets have expected sizes.
 

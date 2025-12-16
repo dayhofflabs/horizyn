@@ -44,7 +44,7 @@ class EmbedDataset(BaseDataset[str]):
     Example:
         >>> # Load protein T5 embeddings
         >>> protein_embeds = EmbedDataset(
-        ...     file_path="data/swissprot_t5.h5",
+        ...     file_path="data/sota/prots_t5.h5",
         ...     in_memory=True,
         ...     dtype=torch.float32
         ... )

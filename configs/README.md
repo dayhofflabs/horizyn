@@ -8,10 +8,10 @@ This directory contains YAML configuration files for training the Horizyn model.
 
 The state-of-the-art configuration used in the Horizyn publication.
 
-**Dataset**: SwissProt (~930 MB)
-- 15,969 reactions from Rhea v131
-- 216,132 proteins from SwissProt v2023_05 with ProtT5 embeddings
-- 257,733 training pairs, 36,433 validation pairs
+**Dataset**: SOTA (~1 GB)
+- ~11,000 reactions from Rhea
+- ~200,000 proteins with ProtT5 embeddings
+- ~257,000 training pairs, ~34,000 test pairs
 
 **Model Architecture**:
 - **Query Encoder**: RDKit+ (2048-bit) + DRFP (2048-bit) → MLP [4096, 512]
@@ -41,7 +41,7 @@ A minimal configuration for fast integration testing.
 **Dataset**: Nanodata (~80 KB, included in repository)
 - 12 reactions from Rhea
 - 11 proteins with T5 embeddings
-- ~10 training pairs, ~2 validation pairs
+- ~10 training pairs, ~2 test pairs
 
 **Model Architecture**: Same as SOTA (scaled down data only)
 
@@ -275,7 +275,7 @@ All metrics are logged to CSV files in the `logs/` directory.
 
 **Solutions**:
 - Verify all data paths in config point to existing files
-- Run `python scripts/download_data.py` if SwissProt data missing
+- Run `python scripts/download_data.py` if SOTA data missing
 - Check that nanodata files exist for testing
 - Ensure file permissions allow reading
 

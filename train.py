@@ -138,7 +138,7 @@ def main():
         print(f"\nError: Data file not found")
         print(f"{e}")
         print("\nPlease download the dataset first:")
-        print("    python scripts/download_data.py --output_dir data/")
+        print("    python scripts/download_data.py")
         sys.exit(1)
     except Exception as e:
         print(f"\nError initializing data module: {e}")

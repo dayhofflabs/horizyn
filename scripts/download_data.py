@@ -2,26 +2,27 @@
 """
 Download Horizyn SOTA Dataset
 
-Downloads the pre-split SwissProt dataset for reproducing the paper results.
+Downloads the SOTA dataset for reproducing the paper results.
 
 Usage:
-    python scripts/download_data.py --output-dir data/swissprot
+    python scripts/download_data.py --output-dir data/sota
 
 Requirements:
     - ~2 GB free disk space for download
-    - ~16 GB RAM during training (all data loaded into memory)
+    - ~8 GB RAM during training (all data loaded into memory)
 
 Dataset Contents:
-    - train_pairs.db: 257,733 training reaction-protein pairs (13.8 MB)
-    - val_pairs.db: 36,433 validation pairs (2.25 MB)
-    - reactions.db: 15,969 reaction SMILES from Rhea v131 (5.38 MB)
-    - proteins_t5_embeddings.h5: 216,132 ProtT5-XL embeddings from SwissProt v2023_05 (904 MB)
+    - train_pairs.csv: ~257,000 training reaction-protein pairs
+    - test_pairs.csv: ~34,000 test pairs
+    - train_rxns.csv: Training reaction SMILES from Rhea
+    - test_rxns.csv: Test reaction SMILES from Rhea
+    - prots_t5.h5: ~200,000 ProtT5-XL embeddings (~900 MB)
 
-Total uncompressed: ~930 MB
+Total uncompressed: ~1 GB
 
 Note:
     All data will be loaded entirely into memory during training.
-    Make sure you have sufficient RAM (~16 GB recommended).
+    Make sure you have sufficient RAM (~8 GB recommended).
 """
 
 import argparse
@@ -42,24 +43,27 @@ except ImportError:
 
 # Dataset configuration
 DATASET_CONFIG = {
-    "name": "horizyn_sota_swissprot",
+    "name": "horizyn_sota",
     "version": "v1.0",
-    "url": "https://zenodo.org/record/XXXXX/files/horizyn_sota_swissprot_v1.tar.gz",
+    "url": "https://zenodo.org/record/XXXXX/files/horizyn_sota_v1.tar.gz",
     # TODO: Replace with actual Zenodo URL after dataset upload
-    "size_gb": 1.0,  # ~930 MB uncompressed
+    "size_gb": 1.0,  # ~1 GB uncompressed
     "checksum": "md5:XXXXX",  # TODO: Replace with actual checksum after packaging
     "files": [
-        "train_pairs.db",
-        "val_pairs.db",
-        "reactions.db",
-        "proteins_t5_embeddings.h5",
+        "train_pairs.csv",
+        "test_pairs.csv",
+        "train_rxns.csv",
+        "test_rxns.csv",
+        "prots_t5.h5",
     ],
-    # Individual file checksums (MD5 from DVC, for verification)
+    # Individual file checksums (MD5, for verification)
+    # TODO: Replace with actual checksums after packaging
     "file_checksums": {
-        "train_pairs.db": "0cf73b3ad6588fbef901a8fd40114709",
-        "val_pairs.db": "3f47f3eeb1a8c20afb63c14c73891401",
-        "reactions.db": "168cb64ef90972d43738258681e4a634",
-        "proteins_t5_embeddings.h5": "282cf3f6e7a502d98ece793d366e75e9",
+        "train_pairs.csv": "XXXXX",
+        "test_pairs.csv": "XXXXX",
+        "train_rxns.csv": "XXXXX",
+        "test_rxns.csv": "XXXXX",
+        "prots_t5.h5": "XXXXX",
     },
 }
 
@@ -209,8 +213,8 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="data/swissprot",
-        help="Output directory for dataset (default: data/swissprot)",
+        default="data/sota",
+        help="Output directory for dataset (default: data/sota)",
     )
     parser.add_argument(
         "--skip_checksum",

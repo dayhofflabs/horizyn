@@ -189,7 +189,7 @@ data_module = HorizynDataModule(
 **`tests/integration/test_smoke_validation.py`**
 - Updated to use `protein_embeds_path` instead of `proteins_path`
 
-**`tests/integration/test_swissprot.py`**
+**`tests/integration/test_sota.py`**
 - Updated to test SOTA dataset format (CSV files)
 - Changed fixture to check for SOTA data directory
 - Updated schema checks from SQLite to CSV

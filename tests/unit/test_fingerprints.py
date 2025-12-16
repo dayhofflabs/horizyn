@@ -307,7 +307,7 @@ class TestRDKitPlusFingerprintDataset:
         """Test with SOTA paper configuration."""
         reactions = BaseDataset(keys=["rxn1"], array_data=[{"reaction_smiles": "CCO.O=O>>CC(=O)O"}])
 
-        # SOTA config from swissprot_sota.yaml
+        # SOTA config from sota.yaml
         fp_dataset = RDKitPlusFingerprintDataset(
             reaction_dataset=reactions,
             vec_dim=1024,
@@ -335,9 +335,9 @@ class TestRDKitPlusFingerprintDataset:
 
         assert torch.equal(fp1, fp2)
 
-    def test_wraps_sql_dataset(self):
-        """Test that fingerprint dataset can wrap SQLDataset."""
-        # Create mock dataset that behaves like SQLDataset
+    def test_wraps_csv_dataset(self):
+        """Test that fingerprint dataset can wrap CSVDataset."""
+        # Create mock dataset that behaves like CSVDataset
         reactions = BaseDataset(
             keys=["rxn1", "rxn2"],
             array_data=[{"reaction_smiles": "CCO>>CC=O"}, {"reaction_smiles": "C>>CC"}],
@@ -562,9 +562,9 @@ class TestDRFPFingerprintDataset:
         fp = fp_dataset["rxn1"]
         assert fp.shape == (1024,)
 
-    def test_wraps_sql_dataset(self):
-        """Test that DRFP dataset can wrap SQLDataset."""
-        # Create mock dataset that behaves like SQLDataset
+    def test_wraps_csv_dataset(self):
+        """Test that DRFP dataset can wrap CSVDataset."""
+        # Create mock dataset that behaves like CSVDataset
         reactions = BaseDataset(
             keys=["rxn1", "rxn2"],
             array_data=[{"reaction_smiles": "CCO>>CC=O"}, {"reaction_smiles": "C>>CC"}],

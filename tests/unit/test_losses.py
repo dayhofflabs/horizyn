@@ -403,7 +403,7 @@ class TestFullBatchMLNCELoss:
 
     def test_sota_configuration(self):
         """Test with SOTA paper configuration."""
-        # From swissprot_sota.yaml
+        # From sota.yaml
         loss_fn = FullBatchMLNCELoss(
             beta=10.0,
             learn_beta=False,
