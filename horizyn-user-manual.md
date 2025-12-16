@@ -167,7 +167,7 @@ target_embeddings = model.target_encoder(protein_embeddings)
 
 ### Loss Functions (`horizyn/losses.py`)
 
-#### FullBatchMLNCELoss (Multi-Label Noise Contrastive Estimation)
+#### FullBatchMLNCELoss (Maximum Likelihood Noise Contrastive Estimation)
 
 The core loss function that handles many-to-many relationships between reactions and proteins.
 

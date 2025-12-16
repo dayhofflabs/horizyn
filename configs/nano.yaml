@@ -66,7 +66,7 @@ training:
   learning_rate: 0.0001        # 1e-4
   weight_decay: 0.01           # 1e-2
 
-  # Loss function (Multi-Label Noise Contrastive Estimation)
+  # Loss function (Maximum Likelihood Noise Contrastive Estimation)
   loss:
     name: FullBatchMLNCELoss
     beta: 10.0                 # Temperature parameter (fixed, not learned)

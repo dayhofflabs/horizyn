@@ -1,7 +1,7 @@
 """
 Loss functions for contrastive learning.
 
-This module implements Multi-Label Noise Contrastive Estimation (MLNCE) and related
+This module implements Maximum Likelihood Noise Contrastive Estimation (MLNCE) and related
 contrastive loss functions for dual-encoder architectures.
 """
 
@@ -178,7 +178,7 @@ class FullBatchNCELoss(nn.Module):
 
 class FullBatchMLNCELoss(FullBatchNCELoss):
     """
-    Multi-Label Noise Contrastive Estimation (MLNCE) loss.
+    Maximum Likelihood Noise Contrastive Estimation (MLNCE) loss.
 
     MLNCE is a contrastive loss function that handles the case where each query can
     have multiple correct targets (multi-label), unlike standard InfoNCE which assumes

@@ -17,7 +17,7 @@ Horizyn is a dual-encoder contrastive learning model that learns to match enzyma
 
 - **Reaction Encoder**: Concatenated RDKit+ (structural) and DRFP fingerprints → MLP
 - **Protein Encoder**: Pre-computed T5 embeddings → MLP
-- **Loss**: Multi-Label Noise Contrastive Estimation (MLNCE)
+- **Loss**: Maximum Likelihood Noise Contrastive Estimation (MLNCE)
 - **Embeddings**: 512-dimensional normalized outputs for both encoders
 
 ## Quick Start
@@ -100,7 +100,7 @@ The Horizyn model uses a dual-encoder architecture:
 
 - **Query Encoder** (Reactions): 2048-dim fingerprints → 4096-dim hidden → 512-dim embedding
 - **Target Encoder** (Proteins): 1024-dim T5 embeddings → 4096-dim hidden → 512-dim embedding
-- **Loss Function**: Multi-Label NCE with temperature parameter (β=10.0)
+- **Loss Function**: MLNCE with temperature parameter (β=10.0)
 
 ## Development
 
@@ -112,10 +112,11 @@ If you use this code in your research, please cite:
 
 ```bibtex
 @article{horizyn2025,
-  title={Horizyn: Contrastive Learning for Enzyme-Reaction Matching},
-  author={[Authors]},
-  journal={[Journal]},
-  year={2025}
+  title = {Dual-encoder contrastive learning accelerates enzyme discovery},
+  author = {Rocks, Jason W. and Truong, Dat P. and Rappoport, Dmitrij and Maddrell-Mander, Sam and Martin-Alarcon, Daniel A. and Lee, Toni and Crossan, Steve and Goldford, Joshua E.},
+  journal = {bioRxiv}
+  year = {2025},
+  doi = {10.1101/2025.08.21.671639},
 }
 ```
 

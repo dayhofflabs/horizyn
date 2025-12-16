@@ -2,7 +2,7 @@
 Lightning module for Horizyn contrastive learning.
 
 This module implements the training and validation loop for the dual-encoder
-contrastive learning model using Multi-Label Noise Contrastive Estimation (MLNCE).
+contrastive learning model using Maximum Likelihood Noise Contrastive Estimation (MLNCE).
 """
 
 from typing import Any, Dict, List
