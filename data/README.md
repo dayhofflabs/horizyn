@@ -85,11 +85,11 @@ python train.py --config configs/nano.yaml
 
 The full dataset used in the Horizyn publication:
 - **Size:** ~1 GB total
-- **Train Reactions:** 10,786 from Rhea
-- **Test Reactions:** 1,013 from Rhea
-- **Proteins:** ~200k from UniProt with ProtT5 embeddings
-- **Train Pairs:** 257,734 pairs
-- **Test Pairs:** 33,997 pairs
+- **Train Reactions:** 10,785 from Rhea
+- **Test Reactions:** 1,012 from Rhea
+- **Proteins:** 216,132 from UniProt with ProtT5 embeddings (192,769 train, 32,100 test)
+- **Train Pairs:** 257,733 pairs
+- **Test Pairs:** 33,996 pairs
 - **Embeddings:** ProtT5-XL (Rostlab/prot_t5_xl_half_uniref50-enc)
 
 **Purpose:** Training the SOTA model for publication results.
