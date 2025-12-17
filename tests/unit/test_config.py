@@ -398,7 +398,7 @@ class TestLoadConfig:
 
         # Should be able to access using dot notation
         assert config.data.train_pairs_path == "data/sota/train_pairs.csv"
-        assert config.model.query_encoder_dims == [2048, 4096, 512]
+        assert config.model.query_encoder_dims == [2048, 4096, 4096, 512]
         assert config.training.learning_rate == 1e-4
 
 

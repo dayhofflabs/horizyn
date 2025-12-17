@@ -335,12 +335,6 @@ class TestSmokeValidationMetrics:
                 # NOTE: With very small nanodata, metrics might still be low, but they
                 # should at least be computed correctly (not stuck at exactly 1.06%)
 
-        # Verify MRR exists and is reasonable
-        if "val/mrr" in last_val:
-            mrr = last_val["val/mrr"]
-            assert torch.isfinite(torch.tensor(mrr)), f"MRR is not finite: {mrr}"
-            assert 0 <= mrr <= 1, f"MRR outside [0,1] range: {mrr}"
-
         # The key verification: with multi-label retrieval, we should see at least
         # some queries finding valid targets (not all zeros)
         top_1 = last_val.get("val/top_1", 0)

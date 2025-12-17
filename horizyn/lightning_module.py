@@ -124,9 +124,7 @@ class HorizynLitModule(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Metrics
-        self.metric_functionals = create_retrieval_metrics(
-            top_k=metric_ks, include_mrr=True
-        )
+        self.metric_functionals = create_retrieval_metrics(top_k=metric_ks)
 
         # Target lookup table for validation retrieval metrics
         self.target_lookup_table = None

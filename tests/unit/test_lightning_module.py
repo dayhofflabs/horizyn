@@ -392,7 +392,6 @@ class TestHorizynLitModule:
             "top_5",
             "top_10",
             "top_50",
-            "mrr",
         ]
         for metric_name in expected_metrics:
             assert metric_name in lit_module.metric_functionals
@@ -487,4 +486,3 @@ class TestHorizynLitModule:
         assert len(target_linears) == 2
         assert target_linears[0].in_features == 1024 and target_linears[0].out_features == 4096
         assert target_linears[1].in_features == 4096 and target_linears[1].out_features == 512
-

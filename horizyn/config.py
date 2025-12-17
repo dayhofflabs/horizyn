@@ -212,10 +212,6 @@ def validate_config(config: DotDict) -> None:
             f"'model.embedding_dim' must be an integer, got {type(config.model.embedding_dim).__name__}"
         )
 
-    # Validate paths exist (if they should)
-    # Note: Don't validate data paths here since data might not be downloaded yet
-    # That's validated at runtime when DataModule is instantiated
-
 
 def parse_overrides(args: list[str]) -> Dict[str, Any]:
     """
