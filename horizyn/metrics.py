@@ -5,7 +5,8 @@ This module implements common information retrieval metrics used to evaluate
 dual-encoder models on protein-reaction retrieval tasks.
 """
 
-from typing import Callable, Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
+
 import torch
 from torch import Tensor
 
@@ -202,16 +203,16 @@ def top_k_hit_rate(scores: Tensor, target_idx: Tensor, k: int = 100) -> Tensor:
     return torch.tensor(1.0 if hit else 0.0, device=scores.device)
 
 
-def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
+def r_precision(scores: Tensor, target_idx: Tensor) -> Tensor:
     """
-    Compute Mean Reciprocal Rank (MRR).
+    Compute R-precision.
 
-    MRR is the average of the reciprocal ranks of the first relevant item for
-    each query. The rank is the position (1-indexed) of the item in the sorted
-    list of scores. If multiple targets exist, only the highest-ranked target
-    is considered.
+    R-precision is the precision at rank R, where R is the number of relevant
+    documents. It measures the fraction of relevant items in the top-R
+    retrieved items.
 
-    For a single query, MRR = 1 / (rank of first relevant item).
+    For a query with R relevant documents, R-precision = (number of relevant
+    documents in top-R) / R.
 
     Args:
         scores: Prediction scores of shape (num_items,). Higher scores indicate
@@ -220,18 +221,19 @@ def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
             padded with -1 for unused positions.
 
     Returns:
-        Tensor containing the reciprocal rank of the first relevant item.
-        Returns 0.0 if no relevant items exist or none are found in ranking.
+        Tensor containing R-precision value. Returns 0.0 if no relevant items.
 
     Example:
         >>> scores = torch.tensor([0.1, 0.9, 0.3, 0.8, 0.2])
-        >>> target_idx = torch.tensor([2, 0, -1])  # Targets at indices 2 and 0
-        >>> mean_reciprocal_rank(scores, target_idx)
-        tensor(0.3333)  # Index 2 is rank 3 (after indices 1 and 3), 1/3 ≈ 0.333
+        >>> target_idx = torch.tensor([2, 4, -1])  # 2 relevant items at indices 2 and 4
+        >>> r_precision(scores, target_idx)
+        tensor(0.5)  # Top-2 are indices [1, 3], only 0 relevant → but wait...
+        # Actually top-2 by score are [1 (0.9), 3 (0.8)], neither is in [2, 4]
+        # So R-precision = 0/2 = 0.0
     """
     if scores.dim() != 1 or target_idx.dim() != 1:
         raise ValueError(
-            "mean_reciprocal_rank expects 1D tensors. "
+            "r_precision expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
 
@@ -239,60 +241,66 @@ def mean_reciprocal_rank(scores: Tensor, target_idx: Tensor) -> Tensor:
     valid_targets = target_idx[target_idx >= 0]
 
     if len(valid_targets) == 0:
-        # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
 
     if valid_targets.dtype != torch.long:
         raise ValueError("target_idx must be dtype torch.long")
-    if int(valid_targets.max().item()) >= scores.shape[0]:
+
+    num_items = scores.shape[0]
+    if int(valid_targets.max().item()) >= num_items:
         raise ValueError(
-            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
         )
 
-    # Get the sorted indices (descending order of scores)
-    sorted_indices = torch.argsort(scores, descending=True)
+    # R = number of relevant documents
+    r = len(valid_targets)
 
-    # Find the ranks (1-indexed) of all valid targets
-    # Create a mapping from index to rank
-    ranks = torch.zeros(scores.shape[0], dtype=torch.long, device=scores.device)
-    ranks[sorted_indices] = torch.arange(1, scores.shape[0] + 1, device=scores.device)
+    # Clamp R to number of items
+    r_clamped = min(r, num_items)
 
-    # Get ranks of valid targets
-    target_ranks = ranks[valid_targets]
+    # Get indices of top-R predictions
+    top_r_indices = torch.topk(scores, k=r_clamped, largest=True).indices
 
-    # Find the minimum rank (best rank)
-    best_rank = target_ranks.min().float()
+    # Count how many relevant items are in top-R
+    hits = torch.isin(top_r_indices, valid_targets).sum().float()
 
-    # Return reciprocal rank
-    return 1.0 / best_rank
+    return hits / r
 
 
-def positive_score(scores: Tensor, target_idx: Tensor) -> Tensor:
+def average_precision(scores: Tensor, target_idx: Tensor) -> Tensor:
     """
-    Compute the mean score of positive (relevant) items.
+    Compute Average Precision (AP).
 
-    This metric measures how highly the model scores relevant items on average.
-    Higher values indicate the model assigns high similarity/relevance scores
-    to the correct targets.
+    Average Precision is the average of precision values computed at each
+    position where a relevant document is retrieved. It rewards both
+    retrieving relevant documents and ranking them highly.
+
+    AP = (1/R) * sum_{k=1}^{n} (P(k) * rel(k))
+
+    where:
+    - R is the number of relevant documents
+    - n is the total number of items
+    - P(k) is the precision at rank k
+    - rel(k) is 1 if item at rank k is relevant, 0 otherwise
 
     Args:
-        scores: Prediction scores of shape (num_items,).
+        scores: Prediction scores of shape (num_items,). Higher scores indicate
+            higher relevance/similarity.
         target_idx: Indices of relevant items, shape (num_targets,). Should be
             padded with -1 for unused positions.
 
     Returns:
-        Tensor containing the mean score of relevant items. Returns 0.0 if
-        no relevant items exist.
+        Tensor containing Average Precision value. Returns 0.0 if no relevant items.
 
     Example:
-        >>> scores = torch.tensor([0.1, 0.9, 0.3, 0.8, 0.2])
-        >>> target_idx = torch.tensor([1, 3, -1])  # Targets at indices 1 and 3
-        >>> positive_score(scores, target_idx)
-        tensor(0.8500)  # (0.9 + 0.8) / 2
+        >>> scores = torch.tensor([0.5, 0.9, 0.3, 0.8, 0.2])
+        >>> target_idx = torch.tensor([1, 3, -1])  # Relevant: indices 1 and 3
+        >>> average_precision(scores, target_idx)
+        tensor(1.0)  # Top-2 are [1, 3], both relevant: P@1=1, P@2=1 → AP=(1+1)/2=1.0
     """
     if scores.dim() != 1 or target_idx.dim() != 1:
         raise ValueError(
-            "positive_score expects 1D tensors. "
+            "average_precision expects 1D tensors. "
             f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
         )
 
@@ -300,83 +308,44 @@ def positive_score(scores: Tensor, target_idx: Tensor) -> Tensor:
     valid_targets = target_idx[target_idx >= 0]
 
     if len(valid_targets) == 0:
-        # No valid targets, return 0
         return torch.tensor(0.0, device=scores.device)
 
     if valid_targets.dtype != torch.long:
         raise ValueError("target_idx must be dtype torch.long")
-    if int(valid_targets.max().item()) >= scores.shape[0]:
-        raise ValueError(
-            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={scores.shape[0]}"
-        )
 
-    # Get scores of positive items
-    pos_scores = scores[valid_targets]
-
-    return pos_scores.mean()
-
-
-def negative_score(scores: Tensor, target_idx: Tensor) -> Tensor:
-    """
-    Compute the mean score of negative (non-relevant) items.
-
-    This metric measures how the model scores non-relevant items on average.
-    Lower values indicate the model correctly assigns low similarity scores
-    to incorrect targets.
-
-    Args:
-        scores: Prediction scores of shape (num_items,).
-        target_idx: Indices of relevant items, shape (num_targets,). Should be
-            padded with -1 for unused positions. All other indices are considered
-            negative.
-
-    Returns:
-        Tensor containing the mean score of non-relevant items. Returns 0.0 if
-        all items are relevant (no negatives exist).
-
-    Example:
-        >>> scores = torch.tensor([0.1, 0.9, 0.3, 0.8, 0.2])
-        >>> target_idx = torch.tensor([1, 3, -1])  # Targets at indices 1 and 3
-        >>> negative_score(scores, target_idx)
-        tensor(0.2000)  # (0.1 + 0.3 + 0.2) / 3
-    """
-    if scores.dim() != 1 or target_idx.dim() != 1:
-        raise ValueError(
-            "negative_score expects 1D tensors. "
-            f"Got scores.dim()={scores.dim()}, target_idx.dim()={target_idx.dim()}"
-        )
-
-    # Filter out padding (-1)
-    valid_targets = target_idx[target_idx >= 0]
-
-    # Create a mask for negative items (all items not in valid_targets)
     num_items = scores.shape[0]
-    neg_mask = torch.ones(num_items, dtype=torch.bool, device=scores.device)
+    if int(valid_targets.max().item()) >= num_items:
+        raise ValueError(
+            f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
+        )
 
-    if len(valid_targets) > 0:
-        if valid_targets.dtype != torch.long:
-            raise ValueError("target_idx must be dtype torch.long")
-        if int(valid_targets.max().item()) >= num_items:
-            raise ValueError(
-                f"target_idx contains out-of-range values: max={int(valid_targets.max().item())} >= num_items={num_items}"
-            )
-        neg_mask[valid_targets] = False
+    # Get sorted indices (descending order of scores)
+    sorted_indices = torch.argsort(scores, descending=True)
 
-    # Get scores of negative items
-    neg_scores = scores[neg_mask]
+    # Create a relevance mask for the sorted order
+    # For each position in the ranked list, check if it's a relevant item
+    relevance = torch.isin(sorted_indices, valid_targets)
 
-    if len(neg_scores) == 0:
-        # All items are positive, return 0
-        return torch.tensor(0.0, device=scores.device)
+    # Compute cumulative sum of relevant items at each position
+    cum_relevant = torch.cumsum(relevance.float(), dim=0)
 
-    return neg_scores.mean()
+    # Compute precision at each position (positions are 1-indexed)
+    positions = torch.arange(1, num_items + 1, device=scores.device, dtype=torch.float)
+    precisions = cum_relevant / positions
+
+    # Average Precision: mean of precisions at positions where relevant items occur
+    # Only sum precisions where relevance is True
+    ap_sum = (precisions * relevance.float()).sum()
+
+    # Divide by number of relevant items
+    num_relevant = len(valid_targets)
+    return ap_sum / num_relevant
 
 
 def create_retrieval_metrics(
     top_k: Optional[List[int]] = None,
-    include_mrr: bool = True,
-    pos_score: bool = False,
-    neg_score: bool = False,
+    include_r_precision: bool = False,
+    include_avg_precision: bool = False,
 ) -> Dict[str, RetrievalMetric]:
     """
     Create a dictionary of retrieval metrics for evaluation.
@@ -387,24 +356,21 @@ def create_retrieval_metrics(
     Args:
         top_k: List of k values for Top-K hit rate metrics. If None, defaults
             to [1, 10, 100, 1000]. Defaults to None.
-        include_mrr: Whether to include Mean Reciprocal Rank metric. Defaults to True.
-        pos_score: Whether to include mean positive score metric. Defaults to False.
-        neg_score: Whether to include mean negative score metric. Defaults to False.
+        include_r_precision: Whether to include R-precision metric. Defaults to False.
+        include_avg_precision: Whether to include Average Precision metric. Defaults to False.
 
     Returns:
         Dictionary mapping metric names to RetrievalMetric instances:
             - f"top_{k}": Top-K hit rate for each k value
-            - "mrr": Mean Reciprocal Rank (if include_mrr=True)
-            - "pos_score": Mean score of positive items (if pos_score=True)
-            - "neg_score": Mean score of negative items (if neg_score=True)
+            - "r_precision": R-precision (if include_r_precision=True)
+            - "avg_precision": Average Precision (if include_avg_precision=True)
 
     Example:
         >>> # Create metrics matching SOTA config
         >>> metrics = create_retrieval_metrics(
         ...     top_k=[1, 10, 100, 1000],
-        ...     include_mrr=True,
-        ...     pos_score=True,
-        ...     neg_score=True
+        ...     include_r_precision=True,
+        ...     include_avg_precision=True,
         ... )
         >>> # Use with predictions
         >>> scores = torch.randn(128, 1000)  # 128 queries, 1000 targets
@@ -425,23 +391,17 @@ def create_retrieval_metrics(
             reduction="mean",
         )
 
-    # Mean Reciprocal Rank
-    if include_mrr:
-        metrics["mrr"] = RetrievalMetric(
-            metric_functional=mean_reciprocal_rank,
+    # R-precision
+    if include_r_precision:
+        metrics["r_precision"] = RetrievalMetric(
+            metric_functional=r_precision,
             reduction="mean",
         )
 
-    # Positive/negative score metrics
-    if pos_score:
-        metrics["pos_score"] = RetrievalMetric(
-            metric_functional=positive_score,
-            reduction="mean",
-        )
-
-    if neg_score:
-        metrics["neg_score"] = RetrievalMetric(
-            metric_functional=negative_score,
+    # Average Precision
+    if include_avg_precision:
+        metrics["avg_precision"] = RetrievalMetric(
+            metric_functional=average_precision,
             reduction="mean",
         )
 

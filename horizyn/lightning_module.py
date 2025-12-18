@@ -2,7 +2,7 @@
 Lightning module for Horizyn contrastive learning.
 
 This module implements the training and validation loop for the dual-encoder
-contrastive learning model using Multi-Label Noise Contrastive Estimation (MLNCE).
+contrastive learning model using Maximum Likelihood Noise Contrastive Estimation (MLNCE).
 """
 
 from typing import Any, Dict, List
@@ -64,8 +64,6 @@ class HorizynLitModule(pl.LightningModule):
         learning_rate: float = 1e-4,
         weight_decay: float = 0.01,
         metric_ks: List[int] = [1, 5, 10, 50],
-        pos_score: bool = False,
-        neg_score: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -126,9 +124,7 @@ class HorizynLitModule(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Metrics
-        self.metric_functionals = create_retrieval_metrics(
-            top_k=metric_ks, include_mrr=True, pos_score=pos_score, neg_score=neg_score
-        )
+        self.metric_functionals = create_retrieval_metrics(top_k=metric_ks)
 
         # Target lookup table for validation retrieval metrics
         self.target_lookup_table = None

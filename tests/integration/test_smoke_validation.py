@@ -335,12 +335,6 @@ class TestSmokeValidationMetrics:
                 # NOTE: With very small nanodata, metrics might still be low, but they
                 # should at least be computed correctly (not stuck at exactly 1.06%)
 
-        # Verify MRR exists and is reasonable
-        if "val/mrr" in last_val:
-            mrr = last_val["val/mrr"]
-            assert torch.isfinite(torch.tensor(mrr)), f"MRR is not finite: {mrr}"
-            assert 0 <= mrr <= 1, f"MRR outside [0,1] range: {mrr}"
-
         # The key verification: with multi-label retrieval, we should see at least
         # some queries finding valid targets (not all zeros)
         top_1 = last_val.get("val/top_1", 0)
@@ -360,33 +354,29 @@ class TestScreeningSet:
         """Test that screening set includes ALL proteins from train and val that exist in HDF5."""
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
+        from horizyn.datasets.csv import CSVDataset
         from horizyn.datasets.hdf5 import EmbedDataset
-        from horizyn.datasets.sql import SQLDataset
 
         config = load_config("configs/nano.yaml")
         dm = HorizynDataModule(**config.data)
         dm.setup("fit")
 
         # Get protein IDs from training and validation pairs
-        train_pairs = SQLDataset(
+        train_pairs = CSVDataset(
             file_path=config.data.train_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
-        val_pairs = SQLDataset(
-            file_path=config.data.val_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+        val_pairs = CSVDataset(
+            file_path=config.data.test_pairs_path,
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
         # Get protein IDs that actually exist in the HDF5 file
         all_proteins_hdf5 = EmbedDataset(
-            file_path=config.data.proteins_path,
+            file_path=config.data.protein_embeds_path,
             in_memory=True,
         )
         available_protein_ids = set(all_proteins_hdf5.keys)
@@ -417,27 +407,23 @@ class TestScreeningSet:
         """Test that proteins only in validation (not training) are in screening set."""
         from horizyn.config import load_config
         from horizyn.data_module import HorizynDataModule
-        from horizyn.datasets.sql import SQLDataset
+        from horizyn.datasets.csv import CSVDataset
 
         config = load_config("configs/nano.yaml")
         dm = HorizynDataModule(**config.data)
         dm.setup("fit")
 
         # Get protein IDs
-        train_pairs = SQLDataset(
+        train_pairs = CSVDataset(
             file_path=config.data.train_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
-        val_pairs = SQLDataset(
-            file_path=config.data.val_pairs_path,
-            table_name="protein_to_reaction",
-            search_key="pr_id",
+        val_pairs = CSVDataset(
+            file_path=config.data.test_pairs_path,
+            key_column="pr_id",
             columns=["protein_id"],
-            in_memory=True,
         )
 
         train_protein_ids = set(train_pairs[k]["protein_id"] for k in train_pairs.keys)

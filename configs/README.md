@@ -8,10 +8,10 @@ This directory contains YAML configuration files for training the Horizyn model.
 
 The state-of-the-art configuration used in the Horizyn publication.
 
-**Dataset**: SwissProt (~930 MB)
-- 15,969 reactions from Rhea v131
-- 216,132 proteins from SwissProt v2023_05 with ProtT5 embeddings
-- 257,733 training pairs, 36,433 validation pairs
+**Dataset**: SOTA (~1 GB)
+- 11,797 reactions from Rhea (10,785 train, 1,012 test)
+- 216,132 proteins with ProtT5 embeddings (192,769 train, 32,100 test)
+- 257,733 training pairs, 33,996 test pairs
 
 **Model Architecture**:
 - **Query Encoder**: RDKit+ (2048-bit) + DRFP (2048-bit) → MLP [4096, 512]
@@ -41,7 +41,7 @@ A minimal configuration for fast integration testing.
 **Dataset**: Nanodata (~80 KB, included in repository)
 - 12 reactions from Rhea
 - 11 proteins with T5 embeddings
-- ~10 training pairs, ~2 validation pairs
+- ~10 training pairs, ~2 test pairs
 
 **Model Architecture**: Same as SOTA (scaled down data only)
 
@@ -68,21 +68,15 @@ All configuration files follow this structure:
 ```yaml
 # Data configuration
 data:
-  reactions_db: "path/to/reactions.db"          # SQLite with reaction SMILES
-  proteins_h5: "path/to/proteins_t5.h5"         # HDF5 with T5 embeddings
-  train_pairs_db: "path/to/train_pairs.db"      # Training pairs
-  val_pairs_db: "path/to/val_pairs.db"          # Validation pairs
+  train_pairs_path: "path/to/train_pairs.csv"       # Training pairs CSV
+  test_pairs_path: "path/to/test_pairs.csv"         # Test pairs CSV
+  train_reactions_path: "path/to/train_rxns.csv"    # Training reactions CSV
+  test_reactions_path: "path/to/test_rxns.csv"      # Test reactions CSV
+  protein_embeds_path: "path/to/prots_t5.h5"        # HDF5 with T5 embeddings
   
-  query_fp_kwargs:                               # Reaction fingerprint config
-    rdkit_plus:                                  # RDKit+ structural fingerprints
-      radius: 3
-      nbits: 2048
-      include_chirality: true
-      fp_types: ["morgan", "rdkit", "atompair", "topological_torsion", "pattern"]
-    drfp:                                        # DRFP difference fingerprints
-      nbits: 2048
-      radius: 3
-      rings: true
+  # Reaction fingerprint dimensions
+  rdkit_fp_dim: 1024                                 # RDKit+ fingerprint dimension
+  drfp_dim: 1024                                     # DRFP fingerprint dimension
 
 # Model architecture
 model:
@@ -172,10 +166,11 @@ To create a new configuration:
 2. **Update data paths** (if using different data):
    ```yaml
    data:
-     reactions_db: "data/my_dataset/reactions.db"
-     proteins_h5: "data/my_dataset/proteins_t5.h5"
-     train_pairs_db: "data/my_dataset/train_pairs.db"
-     val_pairs_db: "data/my_dataset/val_pairs.db"
+     train_pairs_path: "data/my_dataset/train_pairs.csv"
+     test_pairs_path: "data/my_dataset/test_pairs.csv"
+     train_reactions_path: "data/my_dataset/train_rxns.csv"
+     test_reactions_path: "data/my_dataset/test_rxns.csv"
+     protein_embeds_path: "data/my_dataset/prots_t5.h5"
    ```
 
 3. **Adjust hyperparameters** as needed:
@@ -280,7 +275,7 @@ All metrics are logged to CSV files in the `logs/` directory.
 
 **Solutions**:
 - Verify all data paths in config point to existing files
-- Run `python scripts/download_data.py` if SwissProt data missing
+- Run `python scripts/download_data.py` if SOTA data missing
 - Check that nanodata files exist for testing
 - Ensure file permissions allow reading
 

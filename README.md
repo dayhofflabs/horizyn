@@ -17,7 +17,7 @@ Horizyn is a dual-encoder contrastive learning model that learns to match enzyma
 
 - **Reaction Encoder**: Concatenated RDKit+ (structural) and DRFP fingerprints → MLP
 - **Protein Encoder**: Pre-computed T5 embeddings → MLP
-- **Loss**: Multi-Label Noise Contrastive Estimation (MLNCE)
+- **Loss**: Maximum Likelihood Noise Contrastive Estimation (MLNCE)
 - **Embeddings**: 512-dimensional normalized outputs for both encoders
 
 ## Quick Start
@@ -38,10 +38,10 @@ pip install -e .
 
 ### Download Dataset
 
-Download the pre-split SwissProt dataset (~15GB):
+Download the SOTA dataset (~1GB):
 
 ```bash
-python scripts/download_data.py --output_dir data/
+python scripts/download_data.py
 ```
 
 ### Train the Model
@@ -54,7 +54,7 @@ python train.py --config configs/sota.yaml
 
 ## Hardware Requirements
 
-- **RAM**: 16GB minimum (15GB for data loaded entirely in memory)
+- **RAM**: 8GB minimum (4GB for data loaded entirely in memory)
 - **GPU**: Single NVIDIA GPU with 16GB+ VRAM (e.g., T4, A10G, V100)
 - **Disk**: 20GB free space for dataset and checkpoints
 - **Platform**: Linux x86_64 with CUDA 12.1
@@ -73,7 +73,7 @@ horizyn/
 │   ├── datasets/              # Dataset classes
 │   │   ├── base.py           # Base dataset abstractions
 │   │   ├── collection.py     # Dataset composition utilities
-│   │   ├── sql.py            # SQLite dataset loader
+│   │   ├── csv.py            # CSV dataset loader
 │   │   ├── hdf5.py           # HDF5 embedding loader
 │   │   ├── transform.py      # Data transformations
 │   │   └── fingerprints/     # Chemical fingerprint generation
@@ -100,11 +100,11 @@ The Horizyn model uses a dual-encoder architecture:
 
 - **Query Encoder** (Reactions): 2048-dim fingerprints → 4096-dim hidden → 512-dim embedding
 - **Target Encoder** (Proteins): 1024-dim T5 embeddings → 4096-dim hidden → 512-dim embedding
-- **Loss Function**: Multi-Label NCE with temperature parameter (β=10.0)
+- **Loss Function**: MLNCE with temperature parameter (β=10.0)
 
 ## Development
 
-See the [User Manual](user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
+See the [User Manual](horizyn-user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
 
 ## Citation
 
@@ -112,30 +112,25 @@ If you use this code in your research, please cite:
 
 ```bibtex
 @article{horizyn2025,
-  title={Horizyn: Contrastive Learning for Enzyme-Reaction Matching},
-  author={[Authors]},
-  journal={[Journal]},
-  year={2025}
+  title = {Dual-encoder contrastive learning accelerates enzyme discovery},
+  author = {Rocks, Jason W. and Truong, Dat P. and Rappoport, Dmitrij and Maddrell-Mander, Sam and Martin-Alarcon, Daniel A. and Lee, Toni and Crossan, Steve and Goldford, Joshua E.},
+  journal = {bioRxiv}
+  year = {2025},
+  doi = {10.1101/2025.08.21.671639},
 }
 ```
 
 ## License
 
-This code is licensed under **CC BY-NC-SA 4.0** (Creative Commons Attribution-NonCommercial-ShareAlike 4.0).
+This code is licensed under **PolyForm Noncommercial License 1.0.0**.
 
-- ✅ **Academic and research use**: Free to use and modify
-- ❌ **Commercial use**: Prohibited without separate licensing
-- 📤 **Sharing**: Derivatives must use the same license
+- ✅ **Noncommercial use**: Free to use and modify for noncommercial purposes
+- ✅ **Research and education**: Permitted for academic, research, and educational purposes
+- ❌ **Commercial use**: Prohibited without separate commercial licensing
 - 📧 **Commercial inquiries**: contact@dayhofflabs.com
 
-See [LICENSE](LICENSE) for full terms.
+See [LICENSE](LICENSE) for full terms or visit https://polyformproject.org/licenses/noncommercial/1.0.0
 
 ## Contributing
 
 This repository is maintained by Dayhoff Labs. For questions or issues, please open a GitHub issue.
-
-## Acknowledgments
-
-- RDKit for molecular fingerprinting
-- DRFP for differential reaction fingerprints
-- PyTorch Lightning for training infrastructure

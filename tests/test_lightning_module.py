@@ -392,7 +392,6 @@ class TestHorizynLitModule:
             "top_5",
             "top_10",
             "top_50",
-            "mrr",
         ]
         for metric_name in expected_metrics:
             assert metric_name in lit_module.metric_functionals

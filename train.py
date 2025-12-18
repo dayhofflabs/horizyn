@@ -122,22 +122,23 @@ def main():
     try:
         data_module = HorizynDataModule(
             train_pairs_path=config.data.train_pairs_path,
-            val_pairs_path=config.data.val_pairs_path,
-            reactions_path=config.data.reactions_path,
-            proteins_path=config.data.proteins_path,
+            test_pairs_path=config.data.test_pairs_path,
+            train_reactions_path=config.data.train_reactions_path,
+            test_reactions_path=config.data.test_reactions_path,
+            protein_embeds_path=config.data.protein_embeds_path,
             train_batch_size=config.data.train_batch_size,
             retrieval_batch_size=config.data.retrieval_batch_size,
             rdkit_fp_dim=config.data.get("rdkit_fp_dim", 1024),
             drfp_dim=config.data.get("drfp_dim", 1024),
             num_workers=config.data.get("num_workers", 0),
             pin_memory=config.data.get("pin_memory", False),
-            standardize=config.data.get("standardize_reactions", True),
+            standardize_reactions=config.data.get("standardize_reactions", True),
         )
     except FileNotFoundError as e:
         print(f"\nError: Data file not found")
         print(f"{e}")
         print("\nPlease download the dataset first:")
-        print("    python scripts/download_data.py --output_dir data/")
+        print("    python scripts/download_data.py")
         sys.exit(1)
     except Exception as e:
         print(f"\nError initializing data module: {e}")
@@ -156,8 +157,6 @@ def main():
         beta=config.training.loss.beta,
         learn_beta=config.training.loss.get("learn_beta", False),
         metric_ks=config.training.metrics.get("top_k", [1, 10, 100, 1000]),
-        pos_score=config.training.metrics.get("pos_score", False),
-        neg_score=config.training.metrics.get("neg_score", False),
     )
 
     # Count parameters

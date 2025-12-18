@@ -2,7 +2,7 @@
 Unit tests for the data module.
 """
 
-import sqlite3
+import csv
 import tempfile
 from pathlib import Path
 
@@ -19,56 +19,58 @@ def mock_data_files():
     tmpdir = tempfile.mkdtemp()
     tmpdir = Path(tmpdir)
 
-    # Create mock training pairs (using standardized schema)
-    train_pairs_path = tmpdir / "train_pairs.db"
-    conn = sqlite3.connect(train_pairs_path)
-    conn.execute(
-        "CREATE TABLE protein_to_reaction (pr_id INTEGER PRIMARY KEY, reaction_id TEXT, protein_id TEXT)"
-    )
-    conn.executemany(
-        "INSERT INTO protein_to_reaction VALUES (?, ?, ?)",
-        [
-            (1, "rxn1", "prot1"),
-            (2, "rxn2", "prot2"),
-            (3, "rxn1", "prot2"),
-        ],
-    )
-    conn.commit()
-    conn.close()
+    # Create mock training pairs CSV
+    train_pairs_path = tmpdir / "train_pairs.csv"
+    with open(train_pairs_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
+                {"pr_id": "3", "reaction_id": "rxn1", "protein_id": "prot2"},
+            ]
+        )
 
-    # Create mock validation pairs (using standardized schema)
-    val_pairs_path = tmpdir / "val_pairs.db"
-    conn = sqlite3.connect(val_pairs_path)
-    conn.execute(
-        "CREATE TABLE protein_to_reaction (pr_id INTEGER PRIMARY KEY, reaction_id TEXT, protein_id TEXT)"
-    )
-    conn.executemany(
-        "INSERT INTO protein_to_reaction VALUES (?, ?, ?)",
-        [
-            (1, "rxn1", "prot1"),
-            (2, "rxn2", "prot2"),
-        ],
-    )
-    conn.commit()
-    conn.close()
+    # Create mock test pairs CSV
+    test_pairs_path = tmpdir / "test_pairs.csv"
+    with open(test_pairs_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot2"},
+            ]
+        )
 
-    # Create mock reactions (using standardized schema)
-    reactions_path = tmpdir / "reactions.db"
-    conn = sqlite3.connect(reactions_path)
-    conn.execute("CREATE TABLE reaction (reaction_id TEXT PRIMARY KEY, reaction_smiles TEXT)")
-    conn.executemany(
-        "INSERT INTO reaction VALUES (?, ?)",
-        [
-            ("rxn1", "CCO>>CC=O"),
-            ("rxn2", "C>>CC"),
-        ],
-    )
-    conn.commit()
-    conn.close()
+    # Create mock training reactions CSV
+    train_reactions_path = tmpdir / "train_rxns.csv"
+    with open(train_reactions_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
+                {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
+            ]
+        )
+
+    # Create mock test reactions CSV (same reactions for simplicity)
+    test_reactions_path = tmpdir / "test_rxns.csv"
+    with open(test_reactions_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["reaction_id", "reaction_smiles"])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"reaction_id": "rxn1", "reaction_smiles": "CCO>>CC=O"},
+                {"reaction_id": "rxn2", "reaction_smiles": "C>>CC"},
+            ]
+        )
 
     # Create mock protein embeddings
-    proteins_path = tmpdir / "proteins.h5"
-    with h5py.File(proteins_path, "w") as f:
+    protein_embeds_path = tmpdir / "protein_embeds.h5"
+    with h5py.File(protein_embeds_path, "w") as f:
         # Create ids dataset (keys)
         ids = ["prot1", "prot2"]
         f.create_dataset("ids", data=[id.encode() for id in ids])
@@ -78,9 +80,10 @@ def mock_data_files():
 
     return {
         "train_pairs": str(train_pairs_path),
-        "val_pairs": str(val_pairs_path),
-        "reactions": str(reactions_path),
-        "proteins": str(proteins_path),
+        "test_pairs": str(test_pairs_path),
+        "train_reactions": str(train_reactions_path),
+        "test_reactions": str(test_reactions_path),
+        "protein_embeds": str(protein_embeds_path),
     }
 
 
@@ -91,9 +94,10 @@ class TestHorizynDataModule:
         """Test data module initialization."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
         )
@@ -106,9 +110,10 @@ class TestHorizynDataModule:
         """Test data module setup loads data."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
         )
@@ -138,9 +143,10 @@ class TestHorizynDataModule:
         """Test that validation pairs are correctly grouped by query."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         dm.setup("fit")
@@ -175,9 +181,10 @@ class TestHorizynDataModule:
         """Test that validation retrieval batches contain query_id."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
             retrieval_batch_size=1,
         )
 
@@ -203,9 +210,10 @@ class TestHorizynDataModule:
         """Test validation dataloader creation."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
             train_batch_size=2,
             retrieval_batch_size=1,
         )
@@ -227,9 +235,10 @@ class TestHorizynDataModule:
         """Test that dataloaders raise error if setup not called."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         with pytest.raises(RuntimeError, match="not setup"):
@@ -242,15 +251,16 @@ class TestHorizynDataModule:
         """Test that reactions are augmented bidirectionally (Bug 1 fix)."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         dm.setup("fit")
 
         # Check that query dataset has bidirectional reactions (_f and _r)
-        query_keys = list(dm._query_data.keys)
+        query_keys = list(dm._train_query_data.keys)
 
         # Should have 2 original reactions × 2 directions = 4 total
         assert len(query_keys) == 4
@@ -271,25 +281,21 @@ class TestHorizynDataModule:
         # Modify mock data to have val-only proteins
         tmpdir = Path(mock_data_files["train_pairs"]).parent
 
-        # Create new validation pairs with val-only protein
-        val_pairs_path = tmpdir / "val_pairs_extended.db"
-        conn = sqlite3.connect(val_pairs_path)
-        conn.execute(
-            "CREATE TABLE protein_to_reaction (pr_id INTEGER PRIMARY KEY, reaction_id TEXT, protein_id TEXT)"
-        )
-        conn.executemany(
-            "INSERT INTO protein_to_reaction VALUES (?, ?, ?)",
-            [
-                (1, "rxn1", "prot1"),  # Shared with train
-                (2, "rxn2", "prot3"),  # Val-only protein
-            ],
-        )
-        conn.commit()
-        conn.close()
+        # Create new test pairs with test-only protein
+        test_pairs_path = tmpdir / "test_pairs_extended.csv"
+        with open(test_pairs_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["pr_id", "reaction_id", "protein_id"])
+            writer.writeheader()
+            writer.writerows(
+                [
+                    {"pr_id": "1", "reaction_id": "rxn1", "protein_id": "prot1"},
+                    {"pr_id": "2", "reaction_id": "rxn2", "protein_id": "prot3"},
+                ]
+            )
 
         # Create new proteins file with val-only protein
-        proteins_path = tmpdir / "proteins_extended.h5"
-        with h5py.File(proteins_path, "w") as f:
+        protein_embeds_path = tmpdir / "protein_embeds_extended.h5"
+        with h5py.File(protein_embeds_path, "w") as f:
             ids = ["prot1", "prot2", "prot3"]
             f.create_dataset("ids", data=[id.encode() for id in ids])
             vectors = torch.randn(3, 1024).numpy()
@@ -297,9 +303,10 @@ class TestHorizynDataModule:
 
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=str(val_pairs_path),
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=str(proteins_path),
+            test_pairs_path=str(test_pairs_path),
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=str(protein_embeds_path),
         )
 
         dm.setup("fit")
@@ -337,15 +344,16 @@ class TestHorizynDataModule:
         """Test that reactions are augmented with _f and _r suffixes."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         dm.setup("fit")
 
         # Check that query dataset has forward and backward reactions
-        query_keys = list(dm._query_data.keys)
+        query_keys = list(dm._train_query_data.keys)
 
         # Should have _f and _r suffixes
         forward_keys = [k for k in query_keys if k.endswith("_f")]
@@ -365,9 +373,10 @@ class TestHorizynDataModule:
         """Test that training pairs are doubled for bidirectional reactions."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         dm.setup("fit")
@@ -387,9 +396,10 @@ class TestHorizynDataModule:
         """Test that validation pairs are doubled for bidirectional reactions."""
         dm = HorizynDataModule(
             train_pairs_path=mock_data_files["train_pairs"],
-            val_pairs_path=mock_data_files["val_pairs"],
-            reactions_path=mock_data_files["reactions"],
-            proteins_path=mock_data_files["proteins"],
+            test_pairs_path=mock_data_files["test_pairs"],
+            train_reactions_path=mock_data_files["train_reactions"],
+            test_reactions_path=mock_data_files["test_reactions"],
+            protein_embeds_path=mock_data_files["protein_embeds"],
         )
 
         dm.setup("fit")

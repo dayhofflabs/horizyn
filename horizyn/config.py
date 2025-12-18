@@ -166,9 +166,10 @@ def validate_config(config: DotDict) -> None:
     # Validate data section
     required_data_keys = [
         "train_pairs_path",
-        "val_pairs_path",
-        "reactions_path",
-        "proteins_path",
+        "test_pairs_path",
+        "train_reactions_path",
+        "test_reactions_path",
+        "protein_embeds_path",
     ]
     for key in required_data_keys:
         if key not in config.data:
@@ -210,10 +211,6 @@ def validate_config(config: DotDict) -> None:
         raise ValueError(
             f"'model.embedding_dim' must be an integer, got {type(config.model.embedding_dim).__name__}"
         )
-
-    # Validate paths exist (if they should)
-    # Note: Don't validate data paths here since data might not be downloaded yet
-    # That's validated at runtime when DataModule is instantiated
 
 
 def parse_overrides(args: list[str]) -> Dict[str, Any]:

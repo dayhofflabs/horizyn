@@ -42,10 +42,9 @@ class DRFPFingerprintDataset(BaseFingerprintDataset):
 
     Example:
         >>> # Create DRFP fingerprint dataset
-        >>> reactions = SQLDataset(
-        ...     file_path="data/reactions.db",
-        ...     table_name="reactions",
-        ...     search_key="reaction_id",
+        >>> reactions = CSVDataset(
+        ...     file_path="data/train_rxns.csv",
+        ...     key_column="reaction_id",
         ...     columns=["reaction_smiles"]
         ... )
         >>> fp_dataset = DRFPFingerprintDataset(

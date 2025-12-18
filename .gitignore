@@ -34,6 +34,7 @@ venv.bak/
 .venv_studio/
 .venv_workstation/
 .aws_uv_project/
+.mac_uv_project/
 
 # PyCharm
 .idea/
@@ -119,3 +120,7 @@ temp/
 
 # UV lock file (keep for reproducibility)
 # uv.lock
+
+/scratch/**
+!/scratch/**/
+!/scratch/**/.gitkeep

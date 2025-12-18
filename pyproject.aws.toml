@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Contrastive learning for enzyme-reaction matching"
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
-license = {text = "CC BY-NC-SA 4.0"}
+license = {text = "PolyForm-Noncommercial-1.0.0"}
 authors = [
     {name = "Dayhoff Labs", email = "contact@dayhofflabs.com"}
 ]

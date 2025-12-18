@@ -28,11 +28,10 @@ class BaseFingerprintDataset(WrapperDataset[K]):
         _standardizer (Standardizer | None): Standardizer instance if enabled.
 
     Example:
-        >>> # Wrap a SQL dataset with fingerprint generation
-        >>> reactions = SQLDataset(
-        ...     file_path="data/reactions.db",
-        ...     table_name="reactions",
-        ...     search_key="reaction_id",
+        >>> # Wrap a CSV dataset with fingerprint generation
+        >>> reactions = CSVDataset(
+        ...     file_path="data/train_rxns.csv",
+        ...     key_column="reaction_id",
         ...     columns=["reaction_smiles"]
         ... )
         >>> fp_dataset = RDKitPlusFingerprintDataset(

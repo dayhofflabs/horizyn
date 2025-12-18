@@ -14,11 +14,12 @@ logging:
 # Data configuration
 data:
   # Paths to pre-split datasets (relative to project root)
-  # Full SwissProt dataset for SOTA training
-  train_pairs_path: data/swissprot/train_pairs.db
-  val_pairs_path: data/swissprot/val_pairs.db
-  reactions_path: data/swissprot/reactions.db
-  proteins_path: data/swissprot/proteins_t5_embeddings.h5
+  # Full published dataset for SOTA training
+  train_pairs_path: data/sota/train_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
+  train_reactions_path: data/sota/train_rxns.csv
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
 
   # Batch sizes
   train_batch_size: 16384      # Training batch size (full-batch MLNCE)
@@ -47,11 +48,11 @@ model:
 
   # Query encoder (reaction fingerprints → embeddings)
   # Input: 2048-dim (1024 RDKit+ + 1024 DRFP)
-  query_encoder_dims: [2048, 4096, 512]
+  query_encoder_dims: [2048, 4096, 4096, 512]
 
   # Target encoder (protein embeddings → embeddings)
   # Input: 1024-dim (T5 embeddings)
-  target_encoder_dims: [1024, 4096, 512]
+  target_encoder_dims: [1024, 4096, 4096, 512]
 
   # Shared embedding dimension
   embedding_dim: 512
@@ -65,7 +66,7 @@ training:
   learning_rate: 0.0001        # 1e-4
   weight_decay: 0.01           # 1e-2
 
-  # Loss function (Multi-Label Noise Contrastive Estimation)
+  # Loss function (Maximum Likelihood Noise Contrastive Estimation)
   loss:
     name: FullBatchMLNCELoss
     beta: 10.0                 # Temperature parameter (fixed, not learned)
@@ -76,8 +77,6 @@ training:
   # Retrieval metrics
   metrics:
     top_k: [1, 10, 100, 1000]  # Top-K hit rates to compute
-    pos_score: true            # Log positive pair scores
-    neg_score: true            # Log negative pair scores
 
   # Validation
   check_val_every_n_epoch: 10  # Run validation every N epochs

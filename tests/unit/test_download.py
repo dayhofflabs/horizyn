@@ -74,10 +74,11 @@ class TestDownloadScript:
             # Check files list
             assert isinstance(config["files"], list)
             assert len(config["files"]) > 0
-            assert "train_pairs.db" in config["files"]
-            assert "val_pairs.db" in config["files"]
-            assert "reactions.db" in config["files"]
-            assert "proteins_t5_embeddings.h5" in config["files"]
+            assert "train_pairs.csv" in config["files"]
+            assert "test_pairs.csv" in config["files"]
+            assert "train_rxns.csv" in config["files"]
+            assert "test_rxns.csv" in config["files"]
+            assert "prots_t5.h5" in config["files"]
 
         finally:
             sys.path.pop(0)
@@ -260,10 +261,11 @@ class TestDownloadScript:
 
             # These files are required by HorizynDataModule
             required_files = [
-                "train_pairs.db",
-                "val_pairs.db",
-                "reactions.db",
-                "proteins_t5_embeddings.h5",
+                "train_pairs.csv",
+                "test_pairs.csv",
+                "train_rxns.csv",
+                "test_rxns.csv",
+                "prots_t5.h5",
             ]
 
             for required_file in required_files:

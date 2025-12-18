@@ -2,26 +2,39 @@
 """
 Download Horizyn SOTA Dataset
 
-Downloads the pre-split SwissProt dataset for reproducing the paper results.
+Downloads the SOTA dataset for reproducing the paper results.
 
 Usage:
-    python scripts/download_data.py --output-dir data/swissprot
+    python scripts/download_data.py --output-dir data/sota
 
 Requirements:
     - ~2 GB free disk space for download
-    - ~16 GB RAM during training (all data loaded into memory)
+    - ~8 GB RAM during training (all data loaded into memory)
 
 Dataset Contents:
-    - train_pairs.db: 257,733 training reaction-protein pairs (13.8 MB)
-    - val_pairs.db: 36,433 validation pairs (2.25 MB)
-    - reactions.db: 15,969 reaction SMILES from Rhea v131 (5.38 MB)
-    - proteins_t5_embeddings.h5: 216,132 ProtT5-XL embeddings from SwissProt v2023_05 (904 MB)
+    - train_pairs.csv: 257,733 training reaction-protein pairs
+    - test_pairs.csv: 33,996 test pairs
+    - train_rxns.csv: 10,785 training reactions from Rhea
+    - test_rxns.csv: 1,012 test reactions from Rhea
+    - prots_t5.h5: 216,132 ProtT5-XL embeddings (~900 MB)
+        - 192,769 proteins in training pairs
+        - 32,100 proteins in test pairs
+        - 1,223 negative examples (not in any pairs)
+    - prots.fasta: 216,132 protein sequences (~85 MB, optional reference)
 
-Total uncompressed: ~930 MB
+Total uncompressed: ~1 GB
+
+Zenodo:
+    DOI: 10.5281/zenodo.17957034
 
 Note:
     All data will be loaded entirely into memory during training.
-    Make sure you have sufficient RAM (~16 GB recommended).
+    Make sure you have sufficient RAM (~8 GB recommended).
+
+    To get the tar.gz archive checksum after Zenodo publication:
+        wget https://zenodo.org/records/17957034/files/horizyn_sota_v1.tar.gz
+        md5sum horizyn_sota_v1.tar.gz
+        # Update DATASET_CONFIG["checksum"] with the result
 """
 
 import argparse
@@ -42,24 +55,28 @@ except ImportError:
 
 # Dataset configuration
 DATASET_CONFIG = {
-    "name": "horizyn_sota_swissprot",
+    "name": "horizyn_sota",
     "version": "v1.0",
-    "url": "https://zenodo.org/record/XXXXX/files/horizyn_sota_swissprot_v1.tar.gz",
-    # TODO: Replace with actual Zenodo URL after dataset upload
-    "size_gb": 1.0,  # ~930 MB uncompressed
-    "checksum": "md5:XXXXX",  # TODO: Replace with actual checksum after packaging
+    "url": "https://zenodo.org/records/17957034/files/horizyn_sota_v1.tar.gz",
+    "doi": "10.5281/zenodo.17957034",
+    "size_gb": 1.0,  # ~1 GB uncompressed
+    "checksum": "md5:XXXXX",  # TODO: Calculate from packaged tar.gz
     "files": [
-        "train_pairs.db",
-        "val_pairs.db",
-        "reactions.db",
-        "proteins_t5_embeddings.h5",
+        "train_pairs.csv",
+        "test_pairs.csv",
+        "train_rxns.csv",
+        "test_rxns.csv",
+        "prots_t5.h5",
+        "prots.fasta",
     ],
-    # Individual file checksums (MD5 from DVC, for verification)
+    # Individual file checksums (MD5, for verification)
     "file_checksums": {
-        "train_pairs.db": "0cf73b3ad6588fbef901a8fd40114709",
-        "val_pairs.db": "3f47f3eeb1a8c20afb63c14c73891401",
-        "reactions.db": "168cb64ef90972d43738258681e4a634",
-        "proteins_t5_embeddings.h5": "282cf3f6e7a502d98ece793d366e75e9",
+        "train_pairs.csv": "d77c894783a2d3552b90b26eb253633b",
+        "test_pairs.csv": "cdfab924e78d86b35adfcd7c01700974",
+        "train_rxns.csv": "7b0335ac694e4afee87e7a0a970f56e4",
+        "test_rxns.csv": "a45305ba22d4077d7a3f07d5f5d93ff5",
+        "prots_t5.h5": "282cf3f6e7a502d98ece793d366e75e9",
+        "prots.fasta": "b0946eddf6d3b89047ac6b1b1ca374ae",
     },
 }
 
@@ -199,6 +216,48 @@ def verify_dataset_files(output_dir: Path, expected_files: list) -> bool:
     return all_present
 
 
+def verify_file_checksums(output_dir: Path, file_checksums: Dict[str, str]) -> bool:
+    """
+    Verify checksums of individual dataset files.
+
+    Args:
+        output_dir: Directory containing extracted files.
+        file_checksums: Dict mapping filenames to expected MD5 checksums.
+
+    Returns:
+        True if all checksums match, False otherwise.
+    """
+    print("Verifying file checksums...")
+
+    all_valid = True
+    for filename, expected_hash in file_checksums.items():
+        file_path = output_dir / filename
+
+        if not file_path.exists():
+            print(f"  ✗ {filename} (missing)")
+            all_valid = False
+            continue
+
+        # Compute MD5 hash
+        hasher = hashlib.md5()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hasher.update(chunk)
+
+        actual_hash = hasher.hexdigest()
+
+        if actual_hash == expected_hash:
+            print(f"  ✓ {filename}")
+        else:
+            print(f"  ✗ {filename} (checksum mismatch)")
+            print(f"    Expected: {expected_hash}")
+            print(f"    Got:      {actual_hash}")
+            all_valid = False
+
+    print()
+    return all_valid
+
+
 def main():
     """Main download function."""
     parser = argparse.ArgumentParser(
@@ -209,8 +268,8 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="data/swissprot",
-        help="Output directory for dataset (default: data/swissprot)",
+        default="data/sota",
+        help="Output directory for dataset (default: data/sota)",
     )
     parser.add_argument(
         "--skip_checksum",
@@ -253,19 +312,15 @@ def main():
     # Download archive
     archive_path = output_dir / f"{DATASET_CONFIG['name']}.tar.gz"
 
-    if DATASET_CONFIG["url"].startswith("https://zenodo.org/record/XXXXX"):
+    # Note: Archive checksum needs to be updated after Zenodo publishes the tar.gz
+    if "XXXXX" in DATASET_CONFIG["checksum"]:
         print("=" * 80)
-        print("ERROR: Dataset URL not configured")
+        print("WARNING: Archive checksum not yet configured")
         print("=" * 80)
-        print("\nThe dataset URL is a placeholder and needs to be updated.")
-        print("This will be configured after the dataset is uploaded to Zenodo.")
-        print("\nFor now, you can:")
-        print("1. Create mock data for testing (see tests/)")
-        print("2. Wait for the dataset to be published")
-        print("\nExpected files in data/:")
-        for filename in DATASET_CONFIG["files"]:
-            print(f"  - {filename}")
-        sys.exit(1)
+        print("\nThe tar.gz archive checksum will be available after Zenodo publication.")
+        print("Individual file checksums will still be verified after extraction.")
+        print()
+        args.skip_checksum = True  # Auto-skip archive checksum if not configured
 
     try:
         # Download
@@ -289,6 +344,12 @@ def main():
         # Verify all files present
         if not verify_dataset_files(output_dir, DATASET_CONFIG["files"]):
             print("Error: Some dataset files are missing after extraction!")
+            sys.exit(1)
+
+        # Verify individual file checksums
+        if not verify_file_checksums(output_dir, DATASET_CONFIG["file_checksums"]):
+            print("Error: File checksum verification failed!")
+            print("One or more files may be corrupted.")
             sys.exit(1)
 
         # Clean up archive

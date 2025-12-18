@@ -53,7 +53,7 @@ horizyn/
 │   ├── datasets/              # Dataset classes
 │   │   ├── base.py           # Base dataset abstractions
 │   │   ├── collection.py     # Dataset composition utilities
-│   │   ├── sql.py            # SQLite dataset loader
+│   │   ├── csv.py            # CSV dataset loader
 │   │   ├── hdf5.py           # HDF5 embedding loader
 │   │   ├── transform.py      # Data transformations
 │   │   └── fingerprints/     # Chemical fingerprint generation
@@ -82,9 +82,9 @@ The training pipeline follows this data flow:
 1. Configuration Loading (config.py)
    ↓
 2. Data Module Setup (data_module.py)
-   ├── Load training pairs (SQLDataset)
-   ├── Load validation pairs (SQLDataset)
-   ├── Load reactions (SQLDataset)
+   ├── Load training pairs (CSVDataset)
+   ├── Load test pairs (CSVDataset)
+   ├── Load reactions (CSVDataset)
    ├── Generate RDKit+ fingerprints (RDKitPlusFingerprintDataset)
    ├── Generate DRFP fingerprints (DRFPFingerprintDataset)
    ├── Concatenate fingerprints (MergeDataset + ConcatTensorTransform)
@@ -167,7 +167,7 @@ target_embeddings = model.target_encoder(protein_embeddings)
 
 ### Loss Functions (`horizyn/losses.py`)
 
-#### FullBatchMLNCELoss (Multi-Label Noise Contrastive Estimation)
+#### FullBatchMLNCELoss (Maximum Likelihood Noise Contrastive Estimation)
 
 The core loss function that handles many-to-many relationships between reactions and proteins.
 
@@ -232,7 +232,7 @@ The validation loop uses three dataloaders for multi-label retrieval:
 2. **Lookup Table Dataloader**: Loads ALL target embeddings (full screening set: train + val proteins)
 3. **Retrieval Dataloader**: Queries against the lookup table (unique queries only, both directions)
 
-**Multi-Label Retrieval**: Each reaction (query) can be catalyzed by multiple proteins (targets). For example, SwissProt has ~73K validation pairs (after bidirectional augmentation) representing ~2.3K unique reaction-directions with valid proteins per reaction direction.
+**Multi-Label Retrieval**: Each reaction (query) can be catalyzed by multiple proteins (targets). For example, the SOTA dataset has 33,996 test pairs (doubled to ~68K with bidirectional augmentation) representing ~2K unique reaction-directions with valid proteins per reaction direction.
 
 **Critical**: The screening set must include ALL proteins from both training and validation to ensure validation queries can find their target proteins. This was a critical bug that has been fixed.
 
@@ -257,8 +257,8 @@ The `HorizynDataModule` orchestrates all data loading and preprocessing.
 When `setup("fit")` is called:
 
 1. **Load Training Data**:
-   - Training pairs from SQLite (reaction_id, protein_id)
-   - Reactions from SQLite (reaction_id, SMILES)
+   - Training pairs from CSV (reaction_id, protein_id)
+   - Reactions from CSV (reaction_id, reaction_smiles)
    - **Bidirectional Augmentation**: Each reaction is duplicated as forward (_f) and backward (_r) variants
    - Protein embeddings from HDF5 (protein_id → 1024-dim T5 embedding)
 
@@ -270,12 +270,12 @@ When `setup("fit")` is called:
 
 3. **Create Training Dataset**:
    - Merge fingerprints with protein embeddings based on pairs
-   - All data loaded into memory (~15GB for SwissProt)
+   - All data loaded into memory (~2GB for SOTA dataset)
    - Pairs are duplicated for forward and backward reactions
 
 4. **Setup Validation Data**:
-   - Load validation pairs from SQLite
-   - **Bidirectional Augmentation**: Duplicate validation pairs for forward and backward reactions
+   - Load test pairs from CSV
+   - **Bidirectional Augmentation**: Duplicate test pairs for forward and backward reactions
    - Group pairs by query_id (reaction) for multi-label retrieval
    - Create unique query dataset (one entry per reaction direction)
    - Store mapping from each query to its list of valid target IDs
@@ -285,7 +285,7 @@ When `setup("fit")` is called:
 #### Key Design: Memory vs Speed Tradeoff
 
 Horizyn loads all data into memory for maximum training speed. This requires:
-- ~15GB RAM for full SwissProt dataset
+- ~2GB RAM for full SOTA dataset
 - But eliminates I/O bottlenecks during training
 - All fingerprints computed once, cached forever
 
@@ -340,24 +340,22 @@ paired = TupleDataset(
 
 **Key Feature**: `skip_missing=True` (default) filters out pairs referencing non-existent keys with warnings, allowing training to proceed with imperfect data.
 
-#### SQL Datasets (`sql.py`)
+#### CSV Datasets (`csv.py`)
 
-**SQLDataset**: Loads data from SQLite databases
+**CSVDataset**: Loads data from CSV files
 
 ```python
-dataset = SQLDataset(
-    db_path="reactions.db",
-    table="reaction",
-    id_column="reaction_id",
-    columns=["smiles"],
-    rename_map={"smiles": "reaction"},
-    in_memory=True  # Load all data into RAM
+dataset = CSVDataset(
+    file_path="data/sota/train_rxns.csv",
+    key_column="reaction_id",
+    columns=["reaction_smiles"],
+    rename_map={"reaction_smiles": "reaction"},
 )
 ```
 
 **Features**:
 - Column selection and renaming
-- In-memory or on-the-fly loading
+- All data loaded into memory for fast access
 - Automatic string key conversion
 - Missing data handling
 
@@ -369,7 +367,7 @@ HDF5 files must contain two datasets: `ids` (string identifiers) and `vectors` (
 
 ```python
 dataset = EmbedDataset(
-    file_path="data/swissprot/proteins_t5_embeddings.h5",
+    file_path="data/sota/prots_t5.h5",
     in_memory=True,  # Load all embeddings into RAM
     dtype=torch.float32
 )
@@ -386,7 +384,7 @@ dataset = EmbedDataset(
 
 - Integrates with `Standardizer` for consistent SMILES processing
 - Caches fingerprints in memory after first computation
-- Wraps existing datasets (e.g., SQLDataset with SMILES)
+- Wraps existing datasets (e.g., CSVDataset with SMILES)
 
 **RDKitPlusFingerprintDataset** (`rdkit_plus.py`): Structural fingerprints
 
@@ -528,14 +526,14 @@ For each query batch:
 4. Check if ANY of the valid targets appear in top-K
 5. Compute Top-K hit rates, MRR, score distributions
 
-**Example**: If query "rxn_123" has 3 valid proteins ["prot_A", "prot_B", "prot_C"], the top-1 metric checks if ANY of these 3 proteins ranks #1 out of all 34,187 proteins.
+**Example**: If query "rxn_123" has 3 valid proteins ["prot_A", "prot_B", "prot_C"], the top-1 metric checks if ANY of these 3 proteins ranks #1 out of all 216,132 proteins in the screening pool.
 
 **Why Three Dataloaders?**
 
 This design separates three distinct validation tasks:
-1. **Loss computation** - Uses pairs (36,433 pairs) to measure generalization
-2. **Lookup table** - Loads all target embeddings once for efficiency
-3. **Retrieval metrics** - Uses unique queries (1,147 queries) for multi-label evaluation
+1. **Loss computation** - Uses pairs (33,996 pairs in SOTA, doubled to ~68K with bidirectional) to measure generalization
+2. **Lookup table** - Loads all target embeddings once for efficiency (216,132 proteins in SOTA)
+3. **Retrieval metrics** - Uses unique queries (~2K query directions in SOTA) for multi-label evaluation
 
 Each has different batching requirements and data access patterns. The retrieval dataloader groups pairs by query to correctly handle the many-to-many relationship between reactions and proteins.
 
@@ -574,10 +572,11 @@ logging:
 **2. Data**:
 ```yaml
 data:
-  train_pairs_path: data/swissprot/train_pairs.db
-  val_pairs_path: data/swissprot/val_pairs.db
-  reactions_path: data/swissprot/reactions.db
-  proteins_path: data/swissprot/proteins_t5_embeddings.h5
+  train_pairs_path: data/sota/train_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
+  train_reactions_path: data/sota/train_rxns.csv
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
   train_batch_size: 16384
   retrieval_batch_size: 128
   
@@ -643,53 +642,57 @@ Override syntax supports:
 
 ### Data Format
 
-Horizyn expects four files:
+Horizyn expects five CSV/HDF5 files:
 
-#### 1. Training Pairs (`train_pairs.db`)
+#### 1. Training Pairs (`train_pairs.csv`)
 
-SQLite database with table `protein_to_reaction`:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| pr_id | INTEGER | Unique pair ID |
-| reaction_id | TEXT | Reaction identifier |
-| protein_id | TEXT | Protein identifier |
-
-#### 2. Validation Pairs (`val_pairs.db`)
-
-Same schema as training pairs, disjoint set for validation.
-
-#### 3. Reactions (`reactions.db`)
-
-SQLite database with table `reaction`:
+CSV file with columns:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| reaction_id | TEXT | Unique reaction ID |
-| smiles | TEXT | Reaction SMILES string |
+| pr_id | STRING | Unique pair ID |
+| reaction_id | STRING | Reaction identifier |
+| protein_id | STRING | Protein identifier |
+
+#### 2. Test Pairs (`test_pairs.csv`)
+
+Same schema as training pairs, disjoint set for testing.
+
+#### 3. Training Reactions (`train_rxns.csv`)
+
+CSV file with columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| reaction_id | STRING | Unique reaction ID |
+| reaction_smiles | STRING | Reaction SMILES string |
 
 Format: `reactants>>products` (e.g., `CC(=O)O>>CO.CC(=O)`)
 
-#### 4. Protein Embeddings (`proteins_t5_embeddings.h5`)
+#### 4. Test Reactions (`test_rxns.csv`)
+
+Same schema as training reactions, disjoint set for testing.
+
+#### 5. Protein Embeddings (`prots_t5.h5`)
 
 HDF5 file with two datasets:
 
 - `ids`: Array of protein IDs (strings or bytes)
-- `embeddings`: Array of shape (N, 1024) with T5 embeddings
+- `vectors`: Array of shape (N, 1024) with T5 embeddings
 
-**Key Requirement**: IDs in pairs files must match IDs in reactions.db and proteins.h5.
+**Key Requirement**: IDs in pairs files must match IDs in reactions CSV files and prots_t5.h5.
 
 ### Memory Requirements
 
-For SwissProt dataset (with bidirectional augmentation):
-- **Training pairs**: ~200K pairs (doubled) → ~2 MB
-- **Validation pairs**: ~40K pairs (doubled) → ~400 KB
-- **Reactions**: ~100K reactions (doubled: forward + backward) → ~100 MB (SMILES strings)
-- **Protein embeddings**: ~500K proteins × 1024 floats → ~2 GB
-- **RDKit+ fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
-- **DRFP fingerprints**: ~100K reactions × 1024 bits → ~12 MB (cached, bidirectional)
+For SOTA dataset (with bidirectional augmentation):
+- **Training pairs**: 257,733 pairs (doubled to ~515K) → ~5 MB
+- **Test pairs**: 33,996 pairs (doubled to ~68K) → ~700 KB
+- **Reactions**: 11,797 reactions (doubled: forward + backward to ~23.6K) → ~3 MB (SMILES strings)
+- **Protein embeddings**: 216,132 proteins × 1024 floats → ~900 MB
+- **RDKit+ fingerprints**: ~23.6K reaction directions × 1024 bits → ~12 MB (cached, bidirectional)
+- **DRFP fingerprints**: ~23.6K reaction directions × 1024 bits → ~12 MB (cached, bidirectional)
 
-**Total**: ~2.2 GB base + ~10 GB working memory during training = **~15 GB RAM**
+**Total**: ~1 GB base + ~3 GB working memory during training = **~4 GB RAM**
 
 Note: Bidirectional augmentation doubles the reaction count but has minimal impact on memory since fingerprints are computed on-demand and cached.
 
@@ -704,7 +707,7 @@ Note: Bidirectional augmentation doubles the reaction count but has minimal impa
 
 These settings ensure consistent fingerprint generation and match the configuration used in hatchery and the API.
 
-**Schema Consistency**: The SwissProt dataset defines the canonical schema:
+**Schema Consistency**: The SOTA dataset defines the canonical schema:
 - Table name: `protein_to_reaction` (not `pairs`)
 - Columns: `pr_id`, `reaction_id`, `protein_id`
 
@@ -723,7 +726,7 @@ Other datasets use `rename_map` to adapt their schema to this standard without m
 uv sync
 
 # Download data
-python scripts/download_data.py --output_dir data/
+python scripts/download_data.py
 ```
 
 #### 2. Training
@@ -741,7 +744,7 @@ python train.py --config configs/sota.yaml
 
 2. **Data Module Setup** (1-2 minutes)
    - Load training pairs into memory
-   - Load validation pairs into memory
+   - Load test pairs into memory
    - Load all reactions into memory
    - Load all protein embeddings into memory
    - Generate and cache all RDKit+ fingerprints
@@ -826,7 +829,7 @@ The SOTA config (`configs/sota.yaml`) reproduces the paper result:
 ### Nano Configuration
 
 For testing, `configs/nano.yaml` uses a tiny dataset:
-- 10 training pairs, 5 validation pairs
+- 10 training pairs, 2 test pairs
 - ~5 reactions, ~8 proteins
 - Completes in seconds
 
@@ -875,10 +878,11 @@ python train.py --config configs/sota.yaml --training.learning_rate 0.0005
 
 ```yaml
 data:
-  train_pairs_path: path/to/your/train_pairs.db
-  val_pairs_path: path/to/your/val_pairs.db
-  reactions_path: path/to/your/reactions.db
-  proteins_path: path/to/your/proteins.h5
+  train_pairs_path: path/to/your/train_pairs.csv
+  test_pairs_path: path/to/your/test_pairs.csv
+  train_reactions_path: path/to/your/train_rxns.csv
+  test_reactions_path: path/to/your/test_rxns.csv
+  protein_embeds_path: path/to/your/prots_t5.h5
 ```
 
 3. **Train**:
@@ -914,17 +918,17 @@ python train.py --config configs/nano.yaml --training.max_epochs 2
 **Multi-Label Retrieval**: Validation pairs are grouped by query_id before metrics computation. This correctly handles the many-to-many relationship where each reaction can be catalyzed by multiple proteins. Metrics check if ANY valid target appears in top-K, not just one specific target. This is critical for accurate evaluation.
 
 **Three Validation Dataloaders**: Validation uses three separate dataloaders for distinct tasks:
-1. Computing loss on all pairs (36,433 pairs in SwissProt)
-2. Building a lookup table of all target embeddings (34,187 proteins)
-3. Evaluating retrieval metrics on unique queries (1,147 reactions)
+1. Computing loss on all pairs (33,996 pairs in SOTA, doubled to ~68K with bidirectional)
+2. Building a lookup table of all target embeddings (216,132 proteins in SOTA)
+3. Evaluating retrieval metrics on unique queries (~2K reaction directions in SOTA)
 
 Each has different data formats and batching requirements. The retrieval dataloader uses unique queries with associated target lists to support multi-label evaluation.
 
-**Memory-First Design**: All data loads into memory and fingerprints compute once at initialization. This eliminates I/O bottlenecks for maximum training speed at the cost of requiring ~15GB RAM. The large batch size (16384) benefits from memory-resident data enabling fast random access during shuffling.
+**Memory-First Design**: All data loads into memory and fingerprints compute once at initialization. This eliminates I/O bottlenecks for maximum training speed at the cost of requiring ~4GB RAM. The large batch size (16384) benefits from memory-resident data enabling fast random access during shuffling.
 
 **Bidirectional Reactions**: All reactions are trained and evaluated in both forward (reactants→products) and backward (products→reactants) directions. This doubles the training data and ensures the model learns reversible reactions correctly. Reaction keys are suffixed with `_f` (forward) or `_r` (reverse).
 
-**Full Screening Set**: The validation lookup table contains ALL proteins from both training and validation sets (~500K proteins). This ensures validation queries can retrieve their target proteins even if those proteins only appear in validation pairs. Previously, this was a critical bug where ~68% of validation queries had 0% hit rate because their targets weren't in the lookup table.
+**Full Screening Set**: The test lookup table contains ALL proteins from both training and test sets (216,132 proteins in SOTA). This ensures test queries can retrieve their target proteins even if those proteins only appear in test pairs.
 
 **Cosine Distance**: The loss function uses cosine distance (1 - cosine similarity) rather than raw similarity scores, providing intuitive semantics where lower values indicate more similar pairs and stable gradients from normalized embeddings.
 
@@ -964,7 +968,7 @@ python train.py --config configs/nano.yaml \
 - ✅ Test exactly how users will run your code
 - ✅ Fast iteration (< 1 minute with nanodata)
 
-For SwissProt testing without waiting for full training:
+For SOTA testing without waiting for full training:
 
 ```bash
 # Test with full data but limited batches (~2 minutes)
@@ -985,28 +989,28 @@ pytest
 
 This runs 420 tests including:
 - 398 unit tests (datasets, models, losses, metrics, config, etc.)
-- 22 integration tests (smoke tests with nanodata + SwissProt data validation)
+- 22 integration tests (smoke tests with nanodata + SOTA data validation)
 
-#### 3. Final Validation: Run SwissProt Tests (Optional)
+#### 3. Final Validation: Run SOTA Data Tests (Optional)
 
-Only run SwissProt tests when you need to validate with production data:
+Only run SOTA data tests when you need to validate with production data:
 
 ```bash
-# Download SwissProt data first
+# Download SOTA data first
 python scripts/download_data.py
 
-# Run SwissProt validation tests (< 5 seconds)
-pytest tests/integration/test_swissprot.py -v
+# Run SOTA data validation tests (< 5 seconds)
+pytest tests/integration/test_sota.py -v
 ```
 
 These tests verify:
-- Config points to correct SwissProt files
+- Config points to correct SOTA files
 - All data files exist and are not empty
-- Database schemas match expected structure
+- CSV schemas match expected structure
 - Dataset sizes are in expected ranges
 
-**When to run SwissProt tests**:
-- After downloading or updating SwissProt data
+**When to run SOTA data tests**:
+- After downloading or updating SOTA data
 - Before full SOTA training runs
 - When debugging data-related issues
 
@@ -1026,15 +1030,15 @@ The test suite is organized into unit tests and integration tests:
 
 **Unit Tests** (`tests/unit/`, 398 tests, < 1 minute total): Fast, isolated tests of individual components (model, losses, metrics, datasets, fingerprints, config, etc.). Provides 95% code coverage across all modules.
 
-**Integration Tests** (`tests/integration/`, 22 tests, < 30 seconds total): End-to-end tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SwissProt data:
+**Integration Tests** (`tests/integration/`, 22 tests, < 30 seconds total): End-to-end tests using the included nanodata dataset (12 reactions, 11 proteins). Tests the full pipeline without downloading SOTA data:
 - Config and error handling (`test_smoke_config.py`)
 - Core pipeline (`test_smoke_nanodata.py`)
 - Training dynamics (`test_smoke_training.py`)
 - Validation metrics and multi-label retrieval (`test_smoke_validation.py`)
 - Edge cases and robustness (`test_smoke_robustness.py`)
-- SwissProt data validation (`test_swissprot.py`)
+- SOTA data validation (`test_sota.py`)
 
-All tests run by default. SwissProt tests verify data integrity (schemas, sizes) without expensive operations like fingerprint computation or training.
+All tests run by default. SOTA data tests verify data integrity (schemas, sizes) without expensive operations like fingerprint computation or training.
 
 ### Running Tests
 
@@ -1068,18 +1072,18 @@ Run specific test:
 pytest tests/unit/test_model.py::TestMLP::test_forward -v
 ```
 
-Run SwissProt data validation tests (requires SwissProt data):
+Run SOTA data validation tests (requires SOTA data):
 ```bash
 # Download data first
 python scripts/download_data.py
 
-# Run SwissProt tests
-pytest tests/integration/test_swissprot.py -v
+# Run SOTA data tests
+pytest tests/integration/test_sota.py -v
 ```
 
 ### Quick Smoke Test
 
-Test the full training pipeline without downloading SwissProt:
+Test the full training pipeline without downloading SOTA data:
 
 ```bash
 # Using pytest (fastest, ~10 seconds)

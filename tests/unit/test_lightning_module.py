@@ -392,7 +392,6 @@ class TestHorizynLitModule:
             "top_5",
             "top_10",
             "top_50",
-            "mrr",
         ]
         for metric_name in expected_metrics:
             assert metric_name in lit_module.metric_functionals
@@ -487,18 +486,3 @@ class TestHorizynLitModule:
         assert len(target_linears) == 2
         assert target_linears[0].in_features == 1024 and target_linears[0].out_features == 4096
         assert target_linears[1].in_features == 4096 and target_linears[1].out_features == 512
-
-    def test_metrics_pos_neg_flags_enable(self):
-        """When pos_score/neg_score flags are enabled, metrics include them."""
-        lit_module = HorizynLitModule(
-            query_encoder_dims=[128, 256, 64],
-            target_encoder_dims=[256, 256, 64],
-            embedding_dim=64,
-            metric_ks=[1, 5],
-            pos_score=True,
-            neg_score=True,
-        )
-
-        metrics = lit_module.metric_functionals.keys()
-        assert "pos_score" in metrics
-        assert "neg_score" in metrics
