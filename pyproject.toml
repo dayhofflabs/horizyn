@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10,<4.0"
 license = {text = "PolyForm-Noncommercial-1.0.0"}
 authors = [
-    {name = "Dayhoff Labs", email = "contact@dayhofflabs.com"}
+    {name = "Dayhoff Labs", email = "info@dayhofflabs.com"}
 ]
 keywords = ["machine-learning", "contrastive-learning", "enzymes", "reactions", "bioinformatics"]
 
