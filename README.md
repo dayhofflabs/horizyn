@@ -52,6 +52,16 @@ Train the SOTA model (requires ~16GB RAM, single GPU with 16GB+ VRAM):
 python train.py --config configs/sota.yaml
 ```
 
+### Evaluate the Model
+
+Evaluate a trained model checkpoint on the test set:
+
+```bash
+python scripts/evaluate.py --checkpoint checkpoints/epoch=99-step=XXXXX.ckpt
+```
+
+The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are saved during training to the `checkpoints/` directory.
+
 ## Hardware Requirements
 
 - **RAM**: 8GB minimum (4GB for data loaded entirely in memory)
@@ -101,10 +111,6 @@ The Horizyn model uses a dual-encoder architecture:
 - **Query Encoder** (Reactions): 2048-dim fingerprints → 4096-dim hidden → 512-dim embedding
 - **Target Encoder** (Proteins): 1024-dim T5 embeddings → 4096-dim hidden → 512-dim embedding
 - **Loss Function**: MLNCE with temperature parameter (β=10.0)
-
-## Development
-
-See the [User Manual](horizyn-user-manual.md) for comprehensive documentation on testing, implementation details, and usage.
 
 ## Citation
 

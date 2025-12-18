@@ -795,6 +795,44 @@ The system automatically:
 - Restores optimizer state
 - Continues from the saved epoch
 
+### Evaluating a Trained Model
+
+After training completes, evaluate the model on the test set:
+
+```bash
+python scripts/evaluate.py --checkpoint checkpoints/epoch=99-step=XXXXX.ckpt
+```
+
+**What Happens**:
+
+1. **Checkpoint Loading** (< 1 second)
+   - Load model weights from checkpoint
+   - Initialize model architecture
+   - Move to GPU
+
+2. **Data Module Setup** (1-2 minutes)
+   - Load test pairs
+   - Load all reactions (train + test)
+   - Load all protein embeddings (train + test)
+   - Generate and cache fingerprints
+   - Build lookup table of all target embeddings
+
+3. **Evaluation** (seconds to minutes, depending on dataset size)
+   - For each test query:
+     - Compute distances to all targets in lookup table
+     - Rank targets by distance
+     - Check if valid targets appear in top-K
+   - Compute retrieval metrics:
+     - Top-1, Top-10, Top-100, Top-1000 hit rates
+     - Mean Reciprocal Rank (MRR)
+     - Positive/negative score distributions
+
+4. **Results Output**
+   - Metrics printed to terminal
+   - Optionally saved to JSON file
+
+The evaluation uses the same multi-label retrieval logic as validation, where each reaction can be catalyzed by multiple proteins and metrics check if ANY valid target appears in top-K.
+
 ---
 
 ## Configuration System
