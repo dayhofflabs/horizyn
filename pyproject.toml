@@ -1,0 +1,102 @@
+[project]
+name = "horizyn"
+version = "0.1.0"
+description = "Contrastive learning for enzyme-reaction matching"
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+license = {text = "PolyForm-Noncommercial-1.0.0"}
+authors = [
+    {name = "Dayhoff Labs", email = "info@dayhofflabs.com"}
+]
+keywords = ["machine-learning", "contrastive-learning", "enzymes", "reactions", "bioinformatics"]
+
+dependencies = [
+    "torch==2.4.0+cu121",
+    "lightning>=2.2.0",
+    "rdkit>=2022.9.5",
+    "drfp>=0.3.6",
+    "h5py>=3.13.0",
+    "sqlalchemy>=2.0.29",
+    "tables>=3.9.2",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.4.0",
+    "pyyaml>=6.0",
+]
+
+# Specific configuration for PyTorch source (CUDA 12.1, x86_64)
+[[tool.uv.index]]
+name = "torch-cuda"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "torch-cuda" }
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "flake8>=7.0.0",
+    "isort>=5.13.2",
+    "pytest>=8.0.2",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: Integration tests",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--cov=horizyn",
+    "--cov-report=term-missing",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | \.venv_studio
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.coverage.run]
+source = ["horizyn"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+

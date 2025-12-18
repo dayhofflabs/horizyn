@@ -1,0 +1,86 @@
+# Horizyn SOTA Configuration
+# Reproduces the State-of-the-Art model from the paper
+
+# Random seed for reproducibility
+seed: 42
+
+# Logging configuration
+logging:
+  log_dir: logs
+  checkpoint_dir: checkpoints
+  save_every_n_epochs: 10
+  log_every_n_steps: 1
+
+# Data configuration
+data:
+  # Paths to pre-split datasets (relative to project root)
+  # Full published dataset for SOTA training
+  train_pairs_path: data/sota/train_pairs.csv
+  test_pairs_path: data/sota/test_pairs.csv
+  train_reactions_path: data/sota/train_rxns.csv
+  test_reactions_path: data/sota/test_rxns.csv
+  protein_embeds_path: data/sota/prots_t5.h5
+
+  # Batch sizes
+  train_batch_size: 16384      # Training batch size (full-batch MLNCE)
+  retrieval_batch_size: 128    # Retrieval validation batch size
+
+  # Data loading
+  num_workers: 8               # Number of dataloader workers (0 for single process)
+  pin_memory: false            # Pin memory for GPU transfer
+
+  # Reaction fingerprints (RDKit+ and DRFP)
+  rdkit_fp_dim: 1024           # RDKit+ fingerprint dimension
+  drfp_dim: 1024               # DRFP fingerprint dimension
+
+  # Reaction standardization
+  standardize_reactions: true
+  standardize_hypervalent: true
+  standardize_remove_hs: true
+  standardize_kekulize: false
+  standardize_uncharge: true
+  standardize_metals: true
+
+# Model configuration
+model:
+  # Dual encoder architecture
+  name: DualContrastiveModel
+
+  # Query encoder (reaction fingerprints → embeddings)
+  # Input: 2048-dim (1024 RDKit+ + 1024 DRFP)
+  query_encoder_dims: [2048, 4096, 4096, 512]
+
+  # Target encoder (protein embeddings → embeddings)
+  # Input: 1024-dim (T5 embeddings)
+  target_encoder_dims: [1024, 4096, 4096, 512]
+
+  # Shared embedding dimension
+  embedding_dim: 512
+
+# Training configuration
+training:
+  # Number of epochs
+  max_epochs: 100
+
+  # Optimizer (AdamW)
+  learning_rate: 0.0001        # 1e-4
+  weight_decay: 0.01           # 1e-2
+
+  # Loss function (Maximum Likelihood Noise Contrastive Estimation)
+  loss:
+    name: FullBatchMLNCELoss
+    beta: 10.0                 # Temperature parameter (fixed, not learned)
+    learn_beta: false
+    beta_min: 0.01
+    beta_max: 100.0
+
+  # Retrieval metrics
+  metrics:
+    top_k: [1, 10, 100, 1000]  # Top-K hit rates to compute
+
+  # Validation
+  check_val_every_n_epoch: 10  # Run validation every N epochs
+
+  # Progress bar
+  enable_progress_bar: true
+
