@@ -133,7 +133,7 @@ This code is licensed under **PolyForm Noncommercial License 1.0.0**.
 - ✅ **Noncommercial use**: Free to use and modify for noncommercial purposes
 - ✅ **Research and education**: Permitted for academic, research, and educational purposes
 - ❌ **Commercial use**: Prohibited without separate commercial licensing
-- 📧 **Commercial inquiries**: contact@dayhofflabs.com
+- 📧 **Commercial inquiries**: info@dayhofflabs.com
 
 See [LICENSE](LICENSE) for full terms or visit https://polyformproject.org/licenses/noncommercial/1.0.0
 
