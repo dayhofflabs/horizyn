@@ -1,0 +1,3 @@
+rs_id,reaction_id,reaction_smiles
+2401,Rh_20401,*C1C(=O)N(*)C1*.[H]O[H]>>*[NH2+]C(*)C(*)C(=O)[O-]
+3649,Rh_25876,O=O.[NH3+][C@@H](CC(=O)[O-])C(=O)[O-]>>[H]OO[H].[NH2+]=C(CC(=O)[O-])C(=O)[O-]
