@@ -26,21 +26,18 @@ Total uncompressed: ~1 GB
 
 Zenodo:
     DOI: 10.5281/zenodo.17957034
+    Record: https://zenodo.org/records/17957034
 
 Note:
     All data will be loaded entirely into memory during training.
     Make sure you have sufficient RAM (~8 GB recommended).
-
-    To get the tar.gz archive checksum after Zenodo publication:
-        wget https://zenodo.org/records/17957034/files/horizyn_sota_v1.tar.gz
-        md5sum horizyn_sota_v1.tar.gz
-        # Update DATASET_CONFIG["checksum"] with the result
 """
 
 import argparse
+import gzip
 import hashlib
+import shutil
 import sys
-import tarfile
 from pathlib import Path
 from typing import Dict
 
@@ -53,31 +50,40 @@ except ImportError:
     sys.exit(1)
 
 
-# Dataset configuration
+# Zenodo record: https://zenodo.org/records/17957034
+ZENODO_RECORD_ID = 17957034
+ZENODO_API_BASE = f"https://zenodo.org/api/records/{ZENODO_RECORD_ID}"
+
+# Dataset configuration: files hosted individually on Zenodo (no single archive).
+# Each entry: Zenodo key -> (output filename, md5 from Zenodo).
+# .gz files are downloaded and decompressed to the output filename.
+DATASET_FILES = {
+    "train_pairs.csv": ("train_pairs.csv", "d77c894783a2d3552b90b26eb253633b"),
+    "test_pairs.csv": ("test_pairs.csv", "cdfab924e78d86b35adfcd7c01700974"),
+    "train_rxns.csv": ("train_rxns.csv", "7b0335ac694e4afee87e7a0a970f56e4"),
+    "test_rxns.csv": ("test_rxns.csv", "a45305ba22d4077d7a3f07d5f5d93ff5"),
+    "prots_t5.h5.gz": ("prots_t5.h5", "eaf845701188e52e50abab1a239c0d34"),
+    "prots.fasta.gz": ("prots.fasta", "2df315e48ff32764180e7e5feefe8b93"),
+}
+
+# MD5 checksums of the final decompressed output files (for post-download verification).
+DECOMPRESSED_CHECKSUMS = {
+    "prots_t5.h5": "282cf3f6e7a502d98ece793d366e75e9",
+    "prots.fasta": "b0946eddf6d3b89047ac6b1b1ca374ae",
+}
+
 DATASET_CONFIG = {
     "name": "horizyn_sota",
     "version": "v1.0",
-    "url": "https://zenodo.org/records/17957034/files/horizyn_sota_v1.tar.gz",
     "doi": "10.5281/zenodo.17957034",
     "size_gb": 1.0,  # ~1 GB uncompressed
-    "checksum": "md5:XXXXX",  # TODO: Calculate from packaged tar.gz
-    "files": [
-        "train_pairs.csv",
-        "test_pairs.csv",
-        "train_rxns.csv",
-        "test_rxns.csv",
-        "prots_t5.h5",
-        "prots.fasta",
-    ],
-    # Individual file checksums (MD5, for verification)
+    "files": [out_name for _, (out_name, _) in DATASET_FILES.items()],
     "file_checksums": {
-        "train_pairs.csv": "d77c894783a2d3552b90b26eb253633b",
-        "test_pairs.csv": "cdfab924e78d86b35adfcd7c01700974",
-        "train_rxns.csv": "7b0335ac694e4afee87e7a0a970f56e4",
-        "test_rxns.csv": "a45305ba22d4077d7a3f07d5f5d93ff5",
-        "prots_t5.h5": "282cf3f6e7a502d98ece793d366e75e9",
-        "prots.fasta": "b0946eddf6d3b89047ac6b1b1ca374ae",
-    },
+        out_name: md5
+        for _, (out_name, md5) in DATASET_FILES.items()
+        if not out_name.endswith((".h5", ".fasta"))
+    }
+    | DECOMPRESSED_CHECKSUMS,
 }
 
 
@@ -135,11 +141,6 @@ def verify_checksum(file_path: Path, expected_checksum: str) -> bool:
     Returns:
         True if checksum matches, False otherwise.
     """
-    # Check for placeholder before splitting
-    if "XXXXX" in expected_checksum:
-        print("Warning: Checksum verification skipped (placeholder value)")
-        return True
-
     algorithm, expected_hash = expected_checksum.split(":", 1)
 
     print(f"Verifying {algorithm} checksum...")
@@ -168,25 +169,14 @@ def verify_checksum(file_path: Path, expected_checksum: str) -> bool:
         return False
 
 
-def extract_archive(archive_path: Path, output_dir: Path) -> None:
-    """
-    Extract tar.gz archive.
-
-    Args:
-        archive_path: Path to archive file.
-        output_dir: Directory to extract to.
-    """
-    print(f"Extracting: {archive_path.name}")
-
-    with tarfile.open(archive_path, "r:gz") as tar:
-        # Get list of members
-        members = tar.getmembers()
-
-        # Extract with progress bar
-        for member in tqdm(members, desc="Extracting"):
-            tar.extract(member, path=output_dir)
-
-    print(f"✓ Extracted to: {output_dir}\n")
+def decompress_gz(gz_path: Path, out_path: Path) -> None:
+    """Decompress a .gz file to out_path and remove the .gz file."""
+    print(f"Decompressing: {gz_path.name} -> {out_path.name}")
+    with gzip.open(gz_path, "rb") as f_in:
+        with open(out_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    gz_path.unlink()
+    print(f"✓ Decompressed: {out_path.name}\n")
 
 
 def verify_dataset_files(output_dir: Path, expected_files: list) -> bool:
@@ -309,41 +299,34 @@ def main():
             else:
                 print("Some files are missing. Re-downloading...\n")
 
-    # Download archive
-    archive_path = output_dir / f"{DATASET_CONFIG['name']}.tar.gz"
-
-    # Note: Archive checksum needs to be updated after Zenodo publishes the tar.gz
-    if "XXXXX" in DATASET_CONFIG["checksum"]:
-        print("=" * 80)
-        print("WARNING: Archive checksum not yet configured")
-        print("=" * 80)
-        print("\nThe tar.gz archive checksum will be available after Zenodo publication.")
-        print("Individual file checksums will still be verified after extraction.")
-        print()
-        args.skip_checksum = True  # Auto-skip archive checksum if not configured
-
     try:
-        # Download
-        download_file(
-            DATASET_CONFIG["url"],
-            archive_path,
-            DATASET_CONFIG["size_gb"],
-        )
+        for zenodo_key, (out_name, expected_md5) in DATASET_FILES.items():
+            out_path = output_dir / out_name
+            if not args.force and out_path.exists():
+                print(f"Skipping (exists): {out_name}\n")
+                continue
 
-        # Verify checksum
-        if not args.skip_checksum:
-            if not verify_checksum(archive_path, DATASET_CONFIG["checksum"]):
-                print("Error: Checksum verification failed!")
-                print("The downloaded file may be corrupted.")
-                print("Try downloading again or use --skip_checksum to bypass.")
-                sys.exit(1)
+            url = f"{ZENODO_API_BASE}/files/{zenodo_key}/content"
+            is_gz = zenodo_key.endswith(".gz")
+            if is_gz:
+                download_path = output_dir / zenodo_key
+            else:
+                download_path = out_path
 
-        # Extract
-        extract_archive(archive_path, output_dir)
+            download_file(url, download_path, None)
+
+            if not args.skip_checksum:
+                if not verify_checksum(download_path, f"md5:{expected_md5}"):
+                    print("Error: Checksum verification failed!")
+                    print("The downloaded file may be corrupted.")
+                    sys.exit(1)
+
+            if is_gz:
+                decompress_gz(download_path, out_path)
 
         # Verify all files present
         if not verify_dataset_files(output_dir, DATASET_CONFIG["files"]):
-            print("Error: Some dataset files are missing after extraction!")
+            print("Error: Some dataset files are missing!")
             sys.exit(1)
 
         # Verify individual file checksums
@@ -351,11 +334,6 @@ def main():
             print("Error: File checksum verification failed!")
             print("One or more files may be corrupted.")
             sys.exit(1)
-
-        # Clean up archive
-        print(f"Cleaning up: {archive_path.name}")
-        archive_path.unlink()
-        print(f"✓ Removed archive\n")
 
         # Success
         print("=" * 80)
