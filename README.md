@@ -9,7 +9,7 @@
                          /____/                               
 ```
 
-Official implementation of the Horizyn SOTA model for contrastive learning between enzymatic reactions and proteins.
+Official implementation of the Horizyn SOTA model for contrastive learning between enzymatic reactions and proteins.  For the very latest version of the model, plus various search and visualization tools, visit the [Horizyn Web App](https://horizyn.dayhofflabs.com/).
 
 ## Overview
 
@@ -133,9 +133,9 @@ This code is licensed under **PolyForm Noncommercial License 1.0.0**.
 - ✅ **Noncommercial use**: Free to use and modify for noncommercial purposes
 - ✅ **Research and education**: Permitted for academic, research, and educational purposes
 - ❌ **Commercial use**: Prohibited without separate commercial licensing
-- 📧 **Commercial inquiries**: info@dayhofflabs.com
+- 📧 **Commercial inquiries**: [info@dayhofflabs.com](mailto:info@dayhofflabs.com)
 
-See [LICENSE](LICENSE) for full terms or visit https://polyformproject.org/licenses/noncommercial/1.0.0
+See [LICENSE](LICENSE) for full terms or visit [https://polyformproject.org/licenses/noncommercial/1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
 
 ## Contributing
 
