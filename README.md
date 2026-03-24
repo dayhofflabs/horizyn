@@ -9,7 +9,7 @@
                          /____/                               
 ```
 
-Official implementation of the Horizyn SOTA model for contrastive learning between enzymatic reactions and proteins.  For the very latest version of the model, plus various search and visualization tools, visit the [Horizyn Web App](https://horizyn.dayhofflabs.com/).
+Official implementation of the [Horizyn model](https://www.pnas.org/doi/10.1073/pnas.2520070123) for contrastive learning between enzymatic reactions and proteins.  For the very latest version of the model, plus various search and visualization tools, visit the [Horizyn Web App](https://horizyn.dayhofflabs.com/).
 
 ## Overview
 
