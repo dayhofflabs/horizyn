@@ -38,29 +38,37 @@ pip install -e .
 
 ### Download Dataset
 
-Download the SOTA dataset (~1GB):
+Download the SOTA training dataset (~1GB):
 
 ```bash
-python scripts/download_data.py
+uv run python scripts/download_training_data.py
 ```
 
-### Train the Model
+### Download Pre-trained Checkpoint
 
-Train the SOTA model (requires ~16GB RAM, single GPU with 16GB+ VRAM):
+Download the official pre-trained checkpoint (~370MB):
 
 ```bash
-python train.py --config configs/sota.yaml
+uv run python scripts/download_checkpoint.py
 ```
 
 ### Evaluate the Model
 
-Evaluate a trained model checkpoint on the test set:
+Evaluate the pre-trained checkpoint on the test set:
 
 ```bash
-python scripts/evaluate.py --checkpoint checkpoints/epoch=99-step=XXXXX.ckpt
+uv run python scripts/evaluate.py
 ```
 
-The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are saved during training to the `checkpoints/` directory.
+The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are also saved during training to the `checkpoints/` directory.
+
+### Train the Model
+
+Train the SOTA model from scratch (requires ~16GB RAM, single GPU with 16GB+ VRAM):
+
+```bash
+uv run python train.py --config configs/sota.yaml
+```
 
 ## Hardware Requirements
 
@@ -99,7 +107,9 @@ horizyn/
 │   ├── sota.yaml             # SOTA configuration
 │   └── nano.yaml             # Small test configuration
 ├── scripts/                   # Helper scripts
-│   └── download_data.py      # Dataset download
+│   ├── download_training_data.py  # Training data download
+│   ├── download_checkpoint.py     # Pre-trained checkpoint download
+│   └── evaluate.py                # Model evaluation
 ├── train.py                   # Main training entry point
 └── tests/                     # Test suite
 ```

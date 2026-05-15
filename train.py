@@ -14,7 +14,7 @@ Usage:
     python train.py --config configs/sota.yaml --seed 123
 
 Requirements:
-    - Data must be downloaded first (see scripts/download_data.py)
+    - Data must be downloaded first (see scripts/download_training_data.py)
     - Requires ~16GB RAM (all data loaded into memory)
     - Requires single GPU with 16GB+ VRAM
 
@@ -138,7 +138,7 @@ def main():
         print(f"\nError: Data file not found")
         print(f"{e}")
         print("\nPlease download the dataset first:")
-        print("    python scripts/download_data.py")
+        print("    python scripts/download_training_data.py")
         sys.exit(1)
     except Exception as e:
         print(f"\nError initializing data module: {e}")

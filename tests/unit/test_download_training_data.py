@@ -1,4 +1,4 @@
-"""Tests for scripts/download_data.py"""
+"""Tests for scripts/download_training_data.py"""
 
 import hashlib
 import sys
@@ -11,7 +11,7 @@ import pytest
 # Add scripts to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
-from download_data import (
+from download_training_data import (
     DATASET_CONFIG,
     download_file,
     extract_archive,
@@ -37,8 +37,8 @@ class TestDownloadFile:
         mock_progress = Mock()
         mock_progress.n = len(test_content)
 
-        with patch("download_data.requests.get", return_value=mock_response):
-            with patch("download_data.tqdm", return_value=mock_progress):
+        with patch("download_training_data.requests.get", return_value=mock_response):
+            with patch("download_training_data.tqdm", return_value=mock_progress):
                 download_file("https://example.com/file.tar.gz", output_file)
 
         assert output_file.exists()
@@ -57,8 +57,8 @@ class TestDownloadFile:
         mock_progress = Mock()
         mock_progress.n = len(test_content)
 
-        with patch("download_data.requests.get", return_value=mock_response):
-            with patch("download_data.tqdm", return_value=mock_progress):
+        with patch("download_training_data.requests.get", return_value=mock_response):
+            with patch("download_training_data.tqdm", return_value=mock_progress):
                 download_file("https://example.com/file.tar.gz", output_file)
 
         assert output_file.exists()
@@ -71,7 +71,7 @@ class TestDownloadFile:
         import requests
 
         with patch(
-            "download_data.requests.get",
+            "download_training_data.requests.get",
             side_effect=requests.exceptions.RequestException("Network error"),
         ):
             with pytest.raises(RuntimeError, match="Download failed"):
@@ -86,8 +86,8 @@ class TestDownloadFile:
         mock_response.headers = {"content-length": "1000"}  # Expected size larger than actual
         mock_response.iter_content = Mock(return_value=[test_content])
 
-        with patch("download_data.requests.get", return_value=mock_response):
-            with patch("download_data.tqdm") as mock_tqdm:
+        with patch("download_training_data.requests.get", return_value=mock_response):
+            with patch("download_training_data.tqdm") as mock_tqdm:
                 # Mock progress bar with wrong final size
                 mock_progress = Mock()
                 mock_progress.n = len(test_content)  # Actual size
@@ -161,7 +161,7 @@ class TestExtractArchive:
             tar.add(test_file, arcname="test.txt")
 
         # Extract
-        with patch("download_data.tqdm", side_effect=lambda x, **kwargs: x):
+        with patch("download_training_data.tqdm", side_effect=lambda x, **kwargs: x):
             extract_archive(archive_path, extract_dir)
 
         # Verify extraction
@@ -181,7 +181,7 @@ class TestExtractArchive:
             tar.add(test_file, arcname="test.txt")
 
         # Extract (should create directory)
-        with patch("download_data.tqdm", side_effect=lambda x, **kwargs: x):
+        with patch("download_training_data.tqdm", side_effect=lambda x, **kwargs: x):
             extract_archive(archive_path, extract_dir)
 
         assert extract_dir.exists()
@@ -268,10 +268,10 @@ class TestMainFunction:
         for filename in DATASET_CONFIG["files"]:
             (tmp_path / filename).write_bytes(b"existing")
 
-        with patch("sys.argv", ["download_data.py", "--output-dir", str(tmp_path)]):
-            with patch("download_data.verify_dataset_files", return_value=True):
-                with patch("download_data.download_file") as mock_download:
-                    from download_data import main
+        with patch("sys.argv", ["download_training_data.py", "--output-dir", str(tmp_path)]):
+            with patch("download_training_data.verify_dataset_files", return_value=True):
+                with patch("download_training_data.download_file") as mock_download:
+                    from download_training_data import main
 
                     main()
 
@@ -280,9 +280,9 @@ class TestMainFunction:
 
     def test_placeholder_url_exits(self, tmp_path):
         """Test exits gracefully when URL is placeholder."""
-        with patch("sys.argv", ["download_data.py", "--output-dir", str(tmp_path), "--force"]):
+        with patch("sys.argv", ["download_training_data.py", "--output-dir", str(tmp_path), "--force"]):
             with pytest.raises(SystemExit) as exc_info:
-                from download_data import main
+                from download_training_data import main
 
                 main()
 
@@ -290,11 +290,11 @@ class TestMainFunction:
 
     def test_default_output_directory(self):
         """Test default output directory is data/sota."""
-        with patch("sys.argv", ["download_data.py"]):
-            with patch("download_data.Path.mkdir"):
-                with patch("download_data.verify_dataset_files", return_value=True):
+        with patch("sys.argv", ["download_training_data.py"]):
+            with patch("download_training_data.Path.mkdir"):
+                with patch("download_training_data.verify_dataset_files", return_value=True):
                     with patch("sys.exit"):  # Prevent actual exit
-                        from download_data import main
+                        from download_training_data import main
 
                         try:
                             main()

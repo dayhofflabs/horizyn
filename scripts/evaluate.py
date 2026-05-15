@@ -5,13 +5,14 @@ Horizyn Model Evaluation Script
 Evaluates a trained Horizyn checkpoint and computes metrics matching the paper table.
 
 Usage:
-    python scripts/evaluate.py --checkpoint checkpoints/best_20251214.ckpt
+    python scripts/evaluate.py
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
 
     # Use custom config
-    python scripts/evaluate.py --checkpoint checkpoints/best.ckpt --config configs/sota.yaml
+    python scripts/evaluate.py --checkpoint checkpoints/my_model.ckpt --config configs/sota.yaml
 
     # Output as JSON
-    python scripts/evaluate.py --checkpoint checkpoints/best.ckpt --output results.json
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt --output results.json
 
 Metrics computed:
     - Top-1, Top-10, Top-100, Top-1000 Hit Rates
@@ -19,8 +20,8 @@ Metrics computed:
     - Average Precision (Avg. precision)
 
 Example:
-    # Evaluate the SOTA model
-    python scripts/evaluate.py --checkpoint checkpoints/best_20251214/best_20251214.ckpt
+    # Evaluate the official pre-trained checkpoint
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
 """
 
 import argparse
@@ -355,8 +356,8 @@ def main():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        required=True,
-        help="Path to checkpoint file (.ckpt)",
+        default="checkpoints/horizyn-v1.ckpt",
+        help="Path to checkpoint file (default: checkpoints/horizyn-v1.ckpt)",
     )
     parser.add_argument(
         "--config",
