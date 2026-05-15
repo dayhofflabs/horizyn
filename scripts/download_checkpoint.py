@@ -35,8 +35,8 @@ ZENODO_API_BASE = f"https://zenodo.org/api/records/{ZENODO_RECORD_ID}"
 # Zenodo filename has a typo ("horyzin"); we save as the correct name locally.
 CHECKPOINT_ZENODO_KEY = "horyzin-v1.ckpt"
 CHECKPOINT_LOCAL_NAME = "horizyn-v1.ckpt"
-CHECKPOINT_MD5 = "77d15d54bcb99655b4aa8126c3758fc7"
-CHECKPOINT_SIZE_MB = 370
+CHECKPOINT_MD5 = "5b1f938f8b0a82fbe91892a3b4e2bf2c"
+CHECKPOINT_SIZE_MB = 192
 
 
 def download_file(url: str, output_path: Path) -> None:

@@ -67,7 +67,8 @@ The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the h
 Find the most likely catalyzing enzymes for a reaction SMILES, searching the bundled set of ~216K proteins with pre-computed ProtT5-XL embeddings:
 
 ```bash
-uv run python scripts/predict.py "CC(=O)SCoA.OC(CC([O-])=O)CC([O-])=O>>CC(=O)CC(CC([O-])=O)([O-])=O.CoA" --top-k 10
+# Example: ADP + H2O -> AMP + phosphate
+uv run python scripts/predict.py "NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](OP(=O)([O-])[O-])[C@H]1O.[H]O[H]>>NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](O)[C@H]1O.O=P([O-])([O-])O" --top-k 10
 ```
 
 Use `--bidirectional` to score both forward and reverse reaction directions (averaged):

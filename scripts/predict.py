@@ -5,16 +5,17 @@ Horizyn Prediction Script
 Query the Horizyn model with a reaction SMILES to find matching enzymes.
 
 Usage:
-    python scripts/predict.py "CC(=O)O>>CC(=O)OC" --top-k 10
+    # Example: ADP + H2O -> AMP + phosphate
+    python scripts/predict.py "NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](OP(=O)([O-])[O-])[C@H]1O.[H]O[H]>>NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](O)[C@H]1O.O=P([O-])([O-])O" --top-k 10
 
     # Use a custom checkpoint
-    python scripts/predict.py "CC(=O)O>>CC(=O)OC" --checkpoint checkpoints/my_model.ckpt
+    python scripts/predict.py "REACTANT_SMILES>>PRODUCT_SMILES" --checkpoint checkpoints/my_model.ckpt
 
     # Output as JSON
-    python scripts/predict.py "CC(=O)O>>CC(=O)OC" --output results.json
+    python scripts/predict.py "REACTANT_SMILES>>PRODUCT_SMILES" --output results.json
 
     # Bidirectional mode (scores both forward and reverse reaction)
-    python scripts/predict.py "CC(=O)O>>CC(=O)OC" --bidirectional
+    python scripts/predict.py "REACTANT_SMILES>>PRODUCT_SMILES" --bidirectional
 """
 
 import argparse
