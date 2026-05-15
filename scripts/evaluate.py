@@ -96,7 +96,7 @@ def evaluate_checkpoint(
 
     # Import required dataset classes
     from horizyn.datasets.base import BaseDataset
-    from horizyn.datasets.collection import MergeDataset, TupleDataset
+    from horizyn.datasets.collection import MergeDataset
     from horizyn.datasets.csv import CSVDataset
     from horizyn.datasets.fingerprints import (
         DRFPFingerprintDataset,
@@ -207,7 +207,9 @@ def evaluate_checkpoint(
     print(f"Screening set size: {num_targets} proteins")
 
     # Create target ID to index mapping
-    target_id_to_idx = {target_id: idx for idx, target_id in enumerate(protein_embeds.keys)}
+    target_id_to_idx = {
+        target_id: idx for idx, target_id in enumerate(protein_embeds.keys)
+    }
 
     # Encode all targets
     print("Encoding all target proteins...")
@@ -216,12 +218,16 @@ def evaluate_checkpoint(
     )
 
     with torch.no_grad():
-        for batch_start in tqdm(range(0, num_targets, batch_size), desc="Encoding targets"):
+        for batch_start in tqdm(
+            range(0, num_targets, batch_size), desc="Encoding targets"
+        ):
             batch_end = min(batch_start + batch_size, num_targets)
             batch_keys = protein_embeds.keys[batch_start:batch_end]
 
             # Get target vectors
-            target_vecs = torch.stack([protein_embeds[k] for k in batch_keys]).to(device)
+            target_vecs = torch.stack([protein_embeds[k] for k in batch_keys]).to(
+                device
+            )
 
             # Encode
             batch_embeds = model.model.target_encoder(target_vecs)
@@ -278,12 +284,22 @@ def evaluate_checkpoint(
             target_idx = torch.tensor(target_indices, dtype=torch.long, device=device)
 
             # Compute metrics
-            metric_results["top_1"].append(top_k_hit_rate(scores, target_idx, k=1).item())
-            metric_results["top_10"].append(top_k_hit_rate(scores, target_idx, k=10).item())
-            metric_results["top_100"].append(top_k_hit_rate(scores, target_idx, k=100).item())
-            metric_results["top_1000"].append(top_k_hit_rate(scores, target_idx, k=1000).item())
+            metric_results["top_1"].append(
+                top_k_hit_rate(scores, target_idx, k=1).item()
+            )
+            metric_results["top_10"].append(
+                top_k_hit_rate(scores, target_idx, k=10).item()
+            )
+            metric_results["top_100"].append(
+                top_k_hit_rate(scores, target_idx, k=100).item()
+            )
+            metric_results["top_1000"].append(
+                top_k_hit_rate(scores, target_idx, k=1000).item()
+            )
             metric_results["r_precision"].append(r_precision(scores, target_idx).item())
-            metric_results["avg_precision"].append(average_precision(scores, target_idx).item())
+            metric_results["avg_precision"].append(
+                average_precision(scores, target_idx).item()
+            )
 
     # Compute mean metrics
     results = {}

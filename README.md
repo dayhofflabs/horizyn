@@ -62,6 +62,20 @@ uv run python scripts/evaluate.py
 
 The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are also saved during training to the `checkpoints/` directory.
 
+### Query with a Reaction
+
+Find the most likely catalyzing enzymes for a reaction SMILES, searching the bundled set of ~216K proteins with pre-computed ProtT5-XL embeddings:
+
+```bash
+uv run python scripts/predict.py "CC(=O)SCoA.OC(CC([O-])=O)CC([O-])=O>>CC(=O)CC(CC([O-])=O)([O-])=O.CoA" --top-k 10
+```
+
+Use `--bidirectional` to score both forward and reverse reaction directions (averaged):
+
+```bash
+uv run python scripts/predict.py "SMILES>>SMILES" --bidirectional --top-k 20
+```
+
 ### Train the Model
 
 Train the SOTA model from scratch (requires ~16GB RAM, single GPU with 16GB+ VRAM):
@@ -109,6 +123,7 @@ horizyn/
 ├── scripts/                   # Helper scripts
 │   ├── download_training_data.py  # Training data download
 │   ├── download_checkpoint.py     # Pre-trained checkpoint download
+│   ├── predict.py                 # Query model with a reaction SMILES
 │   └── evaluate.py                # Model evaluation
 ├── train.py                   # Main training entry point
 └── tests/                     # Test suite
