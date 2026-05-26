@@ -91,6 +91,12 @@ Train the SOTA model from scratch (requires ~16GB RAM, single GPU with 16GB+ VRA
 uv run python train.py --config configs/sota.yaml
 ```
 
+### Run Tests
+
+```bash
+uv run pytest
+```
+
 ## Hardware Requirements
 
 - **RAM**: 8GB minimum (4GB for data loaded entirely in memory)

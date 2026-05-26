@@ -2,7 +2,6 @@
 
 import hashlib
 import sys
-import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
@@ -13,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
 from download_training_data import (
     DATASET_CONFIG,
+    decompress_gz,
     download_file,
-    extract_archive,
     verify_checksum,
     verify_dataset_files,
 )
@@ -125,13 +124,12 @@ class TestVerifyChecksum:
 
         assert not verify_checksum(test_file, "md5:wronghash123")
 
-    def test_checksum_placeholder(self, tmp_path):
-        """Test checksum verification skips placeholder values."""
+    def test_checksum_placeholder_fails(self, tmp_path):
+        """Test that placeholder checksums fail verification (no skip logic)."""
         test_file = tmp_path / "test.txt"
         test_file.write_bytes(b"test content")
 
-        # Should return True and skip verification
-        assert verify_checksum(test_file, "md5:XXXXX")
+        assert not verify_checksum(test_file, "md5:XXXXX")
 
     def test_unsupported_algorithm(self, tmp_path):
         """Test unsupported hash algorithm raises error."""
@@ -142,50 +140,41 @@ class TestVerifyChecksum:
             verify_checksum(test_file, "sha512:somehash")
 
 
-class TestExtractArchive:
-    """Tests for extract_archive function."""
+class TestDecompressGz:
+    """Tests for decompress_gz function."""
 
-    def test_extract_tar_gz(self, tmp_path):
-        """Test extraction of tar.gz archive."""
-        # Create a test archive
-        archive_path = tmp_path / "test.tar.gz"
-        extract_dir = tmp_path / "extracted"
-        extract_dir.mkdir()
+    def test_decompress_gz_file(self, tmp_path):
+        """Test decompression of a .gz file."""
+        import gzip
 
-        # Create test content
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test content")
+        # Create a test .gz file
+        gz_path = tmp_path / "test.h5.gz"
+        out_path = tmp_path / "test.h5"
+        original_content = b"test content for decompression"
 
-        # Create archive
-        with tarfile.open(archive_path, "w:gz") as tar:
-            tar.add(test_file, arcname="test.txt")
+        with gzip.open(gz_path, "wb") as f:
+            f.write(original_content)
 
-        # Extract
-        with patch("download_training_data.tqdm", side_effect=lambda x, **kwargs: x):
-            extract_archive(archive_path, extract_dir)
+        decompress_gz(gz_path, out_path)
 
-        # Verify extraction
-        extracted_file = extract_dir / "test.txt"
-        assert extracted_file.exists()
-        assert extracted_file.read_text() == "test content"
+        assert out_path.exists()
+        assert out_path.read_bytes() == original_content
+        assert not gz_path.exists()  # .gz file is removed after decompression
 
-    def test_extract_creates_directory(self, tmp_path):
-        """Test extraction creates output directory if needed."""
-        archive_path = tmp_path / "test.tar.gz"
-        extract_dir = tmp_path / "new_dir" / "extracted"
+    def test_decompress_creates_output(self, tmp_path):
+        """Test decompression creates the output file."""
+        import gzip
 
-        # Create minimal archive
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test")
-        with tarfile.open(archive_path, "w:gz") as tar:
-            tar.add(test_file, arcname="test.txt")
+        gz_path = tmp_path / "data.csv.gz"
+        out_path = tmp_path / "data.csv"
 
-        # Extract (should create directory)
-        with patch("download_training_data.tqdm", side_effect=lambda x, **kwargs: x):
-            extract_archive(archive_path, extract_dir)
+        with gzip.open(gz_path, "wb") as f:
+            f.write(b"col1,col2\na,b\n")
 
-        assert extract_dir.exists()
-        assert (extract_dir / "test.txt").exists()
+        decompress_gz(gz_path, out_path)
+
+        assert out_path.exists()
+        assert out_path.read_text() == "col1,col2\na,b\n"
 
 
 class TestVerifyDatasetFiles:
@@ -222,8 +211,8 @@ class TestDatasetConfig:
         """Test config contains all required fields."""
         assert "name" in DATASET_CONFIG
         assert "version" in DATASET_CONFIG
-        assert "url" in DATASET_CONFIG
-        assert "checksum" in DATASET_CONFIG
+        assert "doi" in DATASET_CONFIG
+        assert "size_gb" in DATASET_CONFIG
         assert "files" in DATASET_CONFIG
         assert "file_checksums" in DATASET_CONFIG
 
@@ -233,9 +222,9 @@ class TestDatasetConfig:
         checksum_files = set(DATASET_CONFIG["file_checksums"].keys())
         assert expected_files == checksum_files
 
-    def test_config_has_five_files(self):
-        """Test config specifies exactly 5 expected files."""
-        assert len(DATASET_CONFIG["files"]) == 5
+    def test_config_has_six_files(self):
+        """Test config specifies exactly 6 expected files."""
+        assert len(DATASET_CONFIG["files"]) == 6
 
     def test_config_file_names(self):
         """Test config has correct file names."""
@@ -245,16 +234,15 @@ class TestDatasetConfig:
             "train_rxns.csv",
             "test_rxns.csv",
             "prots_t5.h5",
+            "prots.fasta",
         ]
         assert set(DATASET_CONFIG["files"]) == set(expected)
 
     def test_config_checksums_are_valid_or_placeholder(self):
         """Test all individual checksums are valid MD5 format or placeholders."""
         for filename, checksum in DATASET_CONFIG["file_checksums"].items():
-            # Allow placeholder values during development
             if checksum == "XXXXX":
                 continue
-            # MD5 hashes are 32 hex characters
             assert len(checksum) == 32, f"Invalid MD5 for {filename}"
             assert all(c in "0123456789abcdef" for c in checksum), f"Invalid MD5 hex for {filename}"
 
@@ -277,16 +265,6 @@ class TestMainFunction:
 
                     # Should not attempt download
                     mock_download.assert_not_called()
-
-    def test_placeholder_url_exits(self, tmp_path):
-        """Test exits gracefully when URL is placeholder."""
-        with patch("sys.argv", ["download_training_data.py", "--output-dir", str(tmp_path), "--force"]):
-            with pytest.raises(SystemExit) as exc_info:
-                from download_training_data import main
-
-                main()
-
-            assert exc_info.value.code == 1
 
     def test_default_output_directory(self):
         """Test default output directory is data/sota."""

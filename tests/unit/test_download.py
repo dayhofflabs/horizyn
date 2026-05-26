@@ -66,9 +66,8 @@ class TestDownloadScript:
             # Check required fields
             assert "name" in config
             assert "version" in config
-            assert "url" in config
+            assert "doi" in config
             assert "size_gb" in config
-            assert "checksum" in config
             assert "files" in config
 
             # Check files list
@@ -138,7 +137,7 @@ class TestDownloadScript:
             sys.path.pop(0)
 
     def test_verify_checksum_placeholder(self, tmp_path):
-        """Test that placeholder checksum is skipped."""
+        """Test that placeholder checksum fails verification."""
         import sys
         from pathlib import Path
 
@@ -155,9 +154,9 @@ class TestDownloadScript:
             # Use placeholder checksum
             placeholder_checksum = "sha256:XXXXX"
 
-            # Verify (should skip and return True)
+            # Verify (no skip logic — placeholder fails like any wrong hash)
             result = download_training_data.verify_checksum(test_file, placeholder_checksum)
-            assert result is True
+            assert result is False
 
         finally:
             sys.path.pop(0)
@@ -226,8 +225,8 @@ class TestDownloadScript:
         assert "--force" in result.stdout
 
     @patch("sys.argv", ["download_training_data.py", "--output-dir", "data/"])
-    def test_download_with_placeholder_url(self):
-        """Test that placeholder URL produces helpful error."""
+    def test_download_with_existing_files_skips(self):
+        """Test that download is skipped when all files exist."""
         import sys
         from pathlib import Path
 
@@ -237,11 +236,15 @@ class TestDownloadScript:
         try:
             import download_training_data
 
-            # Should exit with error for placeholder URL
-            with pytest.raises(SystemExit) as exc_info:
-                download_training_data.main()
-
-            assert exc_info.value.code == 1
+            with patch("download_training_data.verify_dataset_files", return_value=True):
+                with patch("download_training_data.Path.exists", return_value=True):
+                    with patch("download_training_data.download_file") as mock_dl:
+                        try:
+                            download_training_data.main()
+                        except SystemExit:
+                            pass
+                        # When files exist, download should not be called
+                        mock_dl.assert_not_called()
 
         finally:
             sys.path.pop(0)
