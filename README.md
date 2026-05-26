@@ -38,7 +38,7 @@ pip install -e .
 
 ### Download Dataset
 
-Download the SOTA training dataset (~1GB):
+Download the training dataset and protein embeddings (~1GB). This provides the ~216K pre-computed ProtT5-XL protein embeddings needed by both evaluation and prediction:
 
 ```bash
 uv run python scripts/download_training_data.py
@@ -54,17 +54,17 @@ uv run python scripts/download_checkpoint.py
 
 ### Evaluate the Model
 
-Evaluate the pre-trained checkpoint on the test set:
+Evaluate the pre-trained checkpoint on the test set (requires both the dataset and checkpoint above):
 
 ```bash
 uv run python scripts/evaluate.py
 ```
 
-The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are also saved during training to the `checkpoints/` directory.
+The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set.
 
 ### Query with a Reaction
 
-Find the most likely catalyzing enzymes for a reaction SMILES, searching the bundled set of ~216K proteins with pre-computed ProtT5-XL embeddings:
+Find the most likely catalyzing enzymes for a reaction SMILES, searching the bundled set of ~216K proteins (requires both the dataset and checkpoint above):
 
 ```bash
 # Example: ADP + H2O -> AMP + phosphate
