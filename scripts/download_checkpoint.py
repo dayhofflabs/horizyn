@@ -12,8 +12,8 @@ The checkpoint can be used directly for evaluation:
     python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
 
 Zenodo:
-    DOI: 10.5281/zenodo.17957034
-    Record: https://zenodo.org/records/17957034
+    DOI: 10.5281/zenodo.20348783
+    Record: https://zenodo.org/records/20348783
 """
 
 import argparse
@@ -29,14 +29,13 @@ except ImportError:
     print("Please install: pip install requests tqdm")
     sys.exit(1)
 
-ZENODO_RECORD_ID = 17957034
+ZENODO_RECORD_ID = 20348783
 ZENODO_API_BASE = f"https://zenodo.org/api/records/{ZENODO_RECORD_ID}"
 
-# Zenodo filename has a typo ("horyzin"); we save as the correct name locally.
-CHECKPOINT_ZENODO_KEY = "horyzin-v1.ckpt"
+CHECKPOINT_ZENODO_KEY = "horizyn_v1_0_dev.ckpt"
 CHECKPOINT_LOCAL_NAME = "horizyn-v1.ckpt"
 CHECKPOINT_MD5 = "5b1f938f8b0a82fbe91892a3b4e2bf2c"
-CHECKPOINT_SIZE_MB = 192
+CHECKPOINT_SIZE_MB = 201
 
 
 def download_file(url: str, output_path: Path) -> None:

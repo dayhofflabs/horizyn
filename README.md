@@ -46,7 +46,7 @@ uv run python scripts/download_training_data.py
 
 ### Download Pre-trained Checkpoint
 
-Download the official pre-trained checkpoint (~370MB):
+Download the official pre-trained checkpoint (~201MB):
 
 ```bash
 uv run python scripts/download_checkpoint.py
@@ -143,12 +143,15 @@ The Horizyn model uses a dual-encoder architecture:
 If you use this code in your research, please cite:
 
 ```bibtex
-@article{horizyn2025,
+@article{horizyn2026,
   title = {Dual-encoder contrastive learning accelerates enzyme discovery},
   author = {Rocks, Jason W. and Truong, Dat P. and Rappoport, Dmitrij and Maddrell-Mander, Sam and Martin-Alarcon, Daniel A. and Lee, Toni and Crossan, Steve and Goldford, Joshua E.},
-  journal = {bioRxiv}
-  year = {2025},
-  doi = {10.1101/2025.08.21.671639},
+  journal = {Proc. Natl. Acad. Sci. U.S.A.},
+  volume = {123},
+  number = {12},
+  pages = {e2520070123},
+  year = {2026},
+  doi = {10.1073/pnas.2520070123},
 }
 ```
 
