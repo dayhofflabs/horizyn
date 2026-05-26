@@ -44,27 +44,33 @@ Download the training dataset and protein embeddings (~1GB). This provides the ~
 uv run python scripts/download_training_data.py
 ```
 
-### Download Pre-trained Checkpoint
+### Download Pre-trained Checkpoints
 
-Download the official pre-trained checkpoint (~201MB):
+Download both official checkpoints (~201MB each, ~402MB total):
 
 ```bash
 uv run python scripts/download_checkpoint.py
 ```
 
+This downloads two checkpoints:
+- **`horizyn_v1_0_dev.ckpt`** — trained on the train split only (paper-faithful); use for evaluation
+- **`horizyn_v1_0_inf.ckpt`** — trained on full data; use for prediction
+
+To download only one: `uv run python scripts/download_checkpoint.py --only dev`
+
 ### Evaluate the Model
 
-Evaluate the pre-trained checkpoint on the test set (requires both the dataset and checkpoint above):
+Evaluate the dev checkpoint on the test set (requires both the dataset and dev checkpoint above):
 
 ```bash
 uv run python scripts/evaluate.py
 ```
 
-The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set.
+The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Expected: top-1 ≈ 32.4%.
 
 ### Query with a Reaction
 
-Find the most likely catalyzing enzymes for a reaction SMILES, searching the bundled set of ~216K proteins (requires both the dataset and checkpoint above):
+Find the most likely catalyzing enzymes for a reaction SMILES, using the inference checkpoint against the bundled ~216K protein embeddings (requires both the dataset and inf checkpoint above):
 
 ```bash
 # Example: ADP + H2O -> AMP + phosphate

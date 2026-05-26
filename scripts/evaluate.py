@@ -6,13 +6,13 @@ Evaluates a trained Horizyn checkpoint and computes metrics matching the paper t
 
 Usage:
     python scripts/evaluate.py
-    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn_v1_0_dev.ckpt
 
     # Use custom config
     python scripts/evaluate.py --checkpoint checkpoints/my_model.ckpt --config configs/sota.yaml
 
     # Output as JSON
-    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt --output results.json
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn_v1_0_dev.ckpt --output results.json
 
 Metrics computed:
     - Top-1, Top-10, Top-100, Top-1000 Hit Rates
@@ -20,8 +20,8 @@ Metrics computed:
     - Average Precision (Avg. precision)
 
 Example:
-    # Evaluate the official pre-trained checkpoint
-    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
+    # Evaluate the official dev checkpoint (paper-faithful, train-split only)
+    python scripts/evaluate.py --checkpoint checkpoints/horizyn_v1_0_dev.ckpt
 """
 
 import argparse
@@ -372,8 +372,8 @@ def main():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="checkpoints/horizyn-v1.ckpt",
-        help="Path to checkpoint file (default: checkpoints/horizyn-v1.ckpt)",
+        default="checkpoints/horizyn_v1_0_dev.ckpt",
+        help="Path to checkpoint file (default: checkpoints/horizyn_v1_0_dev.ckpt)",
     )
     parser.add_argument(
         "--config",

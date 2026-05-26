@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Download Horizyn Pre-trained Checkpoint
+Download Horizyn Pre-trained Checkpoints
 
-Downloads the official pre-trained Horizyn v1 checkpoint from Zenodo.
+Downloads the official Horizyn v1 checkpoints from Zenodo:
+  - horizyn_v1_0_dev.ckpt  (paper-faithful, for evaluation)
+  - horizyn_v1_0_inf.ckpt  (full training data, for prediction)
 
 Usage:
     python scripts/download_checkpoint.py
+    python scripts/download_checkpoint.py --only dev
+    python scripts/download_checkpoint.py --only inf
     python scripts/download_checkpoint.py --output-dir checkpoints
-
-The checkpoint can be used directly for evaluation:
-    python scripts/evaluate.py --checkpoint checkpoints/horizyn-v1.ckpt
 
 Zenodo:
     DOI: 10.5281/zenodo.20348783
@@ -32,10 +33,22 @@ except ImportError:
 ZENODO_RECORD_ID = 20348783
 ZENODO_API_BASE = f"https://zenodo.org/api/records/{ZENODO_RECORD_ID}"
 
-CHECKPOINT_ZENODO_KEY = "horizyn_v1_0_dev.ckpt"
-CHECKPOINT_LOCAL_NAME = "horizyn-v1.ckpt"
-CHECKPOINT_MD5 = "5b1f938f8b0a82fbe91892a3b4e2bf2c"
-CHECKPOINT_SIZE_MB = 201
+CHECKPOINTS = {
+    "dev": {
+        "zenodo_key": "horizyn_v1_0_dev.ckpt",
+        "local_name": "horizyn_v1_0_dev.ckpt",
+        "md5": "5b1f938f8b0a82fbe91892a3b4e2bf2c",
+        "size_mb": 201,
+        "description": "Development (paper-faithful, train-split only)",
+    },
+    "inf": {
+        "zenodo_key": "horizyn_v1_0_inf.ckpt",
+        "local_name": "horizyn_v1_0_inf.ckpt",
+        "md5": "cf6775b775287462099ae0681485a6bc",
+        "size_mb": 201,
+        "description": "Inference (full training data, for prediction)",
+    },
+}
 
 
 def download_file(url: str, output_path: Path) -> None:
@@ -93,9 +106,35 @@ def verify_checksum(file_path: Path, expected_md5: str) -> bool:
         return False
 
 
+def download_one(ckpt_info: dict, output_dir: Path, force: bool) -> bool:
+    """Download and verify a single checkpoint. Returns True on success."""
+    output_path = output_dir / ckpt_info["local_name"]
+
+    print(f"  {ckpt_info['local_name']}  ({ckpt_info['description']})")
+    print(f"  Size: ~{ckpt_info['size_mb']} MB")
+    print(f"  Output: {output_path}\n")
+
+    if output_path.exists() and not force:
+        print(f"Already exists: {output_path}")
+        print("Use --force to re-download.\n")
+        if verify_checksum(output_path, ckpt_info["md5"]):
+            return True
+        print("Existing file is corrupted. Re-downloading...\n")
+
+    url = f"{ZENODO_API_BASE}/files/{ckpt_info['zenodo_key']}/content"
+    download_file(url, output_path)
+
+    if not verify_checksum(output_path, ckpt_info["md5"]):
+        print("Error: Checksum verification failed!")
+        print("The downloaded file may be corrupted.")
+        return False
+
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Download Horizyn pre-trained checkpoint from Zenodo",
+        description="Download Horizyn pre-trained checkpoints from Zenodo",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -106,51 +145,49 @@ def main():
         help="Output directory (default: checkpoints)",
     )
     parser.add_argument(
+        "--only",
+        choices=["dev", "inf"],
+        default=None,
+        help="Download only one checkpoint (default: both)",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Force download even if file exists",
     )
 
     args = parser.parse_args()
-
     output_dir = Path(args.output_dir)
-    output_path = output_dir / CHECKPOINT_LOCAL_NAME
+
+    targets = [args.only] if args.only else ["dev", "inf"]
 
     print("=" * 70)
     print("HORIZYN CHECKPOINT DOWNLOAD")
     print("=" * 70)
-    print(f"Checkpoint: {CHECKPOINT_LOCAL_NAME}")
-    print(f"Size: ~{CHECKPOINT_SIZE_MB} MB")
-    print(f"Output: {output_path}")
+    print(f"Record: https://zenodo.org/records/{ZENODO_RECORD_ID}")
+    print(f"Output directory: {output_dir}/")
     print("=" * 70 + "\n")
 
-    if output_path.exists() and not args.force:
-        print(f"Checkpoint already exists: {output_path}")
-        print("Use --force to re-download.\n")
-        if verify_checksum(output_path, CHECKPOINT_MD5):
-            print("✓ Checkpoint ready for evaluation!\n")
-            print("To evaluate, run:")
-            print(f"    python scripts/evaluate.py --checkpoint {output_path}")
-            return
-        else:
-            print("Existing file is corrupted. Re-downloading...\n")
+    failed = []
+    for key in targets:
+        info = CHECKPOINTS[key]
+        print("-" * 70)
+        if not download_one(info, output_dir, args.force):
+            failed.append(key)
 
-    url = f"{ZENODO_API_BASE}/files/{CHECKPOINT_ZENODO_KEY}/content"
-    download_file(url, output_path)
-
-    if not verify_checksum(output_path, CHECKPOINT_MD5):
-        print("Error: Checksum verification failed!")
-        print("The downloaded file may be corrupted.")
+    print("=" * 70)
+    if failed:
+        print(f"FAILED: {', '.join(failed)}")
         sys.exit(1)
 
-    size_mb = output_path.stat().st_size / (1024 * 1024)
-
-    print("=" * 70)
     print("DOWNLOAD COMPLETE")
     print("=" * 70)
-    print(f"✓ Checkpoint ready: {output_path} ({size_mb:.1f} MB)\n")
-    print("To evaluate, run:")
-    print(f"    python scripts/evaluate.py --checkpoint {output_path}")
+    print()
+    print("To evaluate (uses dev checkpoint, matches paper metrics):")
+    print("    python scripts/evaluate.py")
+    print()
+    print("To predict enzymes for a reaction (uses inf checkpoint):")
+    print('    python scripts/predict.py "REACTANTS>>PRODUCTS" --top-k 10')
 
 
 if __name__ == "__main__":

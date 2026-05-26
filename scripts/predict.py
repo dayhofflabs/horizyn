@@ -100,7 +100,7 @@ def build_reaction_fingerprint(
 
 def predict(
     reaction_smiles: str,
-    checkpoint_path: str = "checkpoints/horizyn-v1.ckpt",
+    checkpoint_path: str = "checkpoints/horizyn_v1_0_inf.ckpt",
     config_path: str = "configs/sota.yaml",
     device: str = "cuda",
     top_k: int = 10,
@@ -206,8 +206,8 @@ def main():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="checkpoints/horizyn-v1.ckpt",
-        help="Path to checkpoint (default: checkpoints/horizyn-v1.ckpt)",
+        default="checkpoints/horizyn_v1_0_inf.ckpt",
+        help="Path to checkpoint (default: checkpoints/horizyn_v1_0_inf.ckpt)",
     )
     parser.add_argument(
         "--config",
