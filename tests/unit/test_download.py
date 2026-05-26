@@ -1,5 +1,5 @@
 """
-Unit tests for the scripts/download_data.py script.
+Unit tests for the scripts/download_training_data.py script.
 """
 
 import hashlib
@@ -11,31 +11,31 @@ import pytest
 
 
 class TestDownloadScript:
-    """Tests for the download_data.py script."""
+    """Tests for the download_training_data.py script."""
 
     def test_download_script_exists(self):
-        """Test that download_data.py exists."""
-        download_script = Path("scripts/download_data.py")
-        assert download_script.exists(), "scripts/download_data.py not found"
-        assert download_script.is_file(), "scripts/download_data.py is not a file"
+        """Test that download_training_data.py exists."""
+        download_script = Path("scripts/download_training_data.py")
+        assert download_script.exists(), "scripts/download_training_data.py not found"
+        assert download_script.is_file(), "scripts/download_training_data.py is not a file"
 
     def test_download_script_has_shebang(self):
-        """Test that download_data.py has proper shebang."""
-        download_script = Path("scripts/download_data.py")
+        """Test that download_training_data.py has proper shebang."""
+        download_script = Path("scripts/download_training_data.py")
         with open(download_script, "r") as f:
             first_line = f.readline()
         assert first_line.startswith("#!/usr/bin/env python"), "Missing or incorrect shebang"
 
     def test_download_script_has_docstring(self):
-        """Test that download_data.py has a docstring."""
-        download_script = Path("scripts/download_data.py")
+        """Test that download_training_data.py has a docstring."""
+        download_script = Path("scripts/download_training_data.py")
         with open(download_script, "r") as f:
             content = f.read()
         assert '"""' in content, "Missing docstring"
         assert "Usage:" in content, "Missing usage documentation"
 
     def test_download_script_imports(self):
-        """Test that download_data.py can be imported."""
+        """Test that download_training_data.py can be imported."""
         # Add scripts/ to path
         import sys
         from pathlib import Path
@@ -44,7 +44,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data  # noqa: F401
+            import download_training_data  # noqa: F401
 
             # Should not raise ImportError
         finally:
@@ -59,16 +59,15 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
-            config = download_data.DATASET_CONFIG
+            config = download_training_data.DATASET_CONFIG
 
             # Check required fields
             assert "name" in config
             assert "version" in config
-            assert "url" in config
+            assert "doi" in config
             assert "size_gb" in config
-            assert "checksum" in config
             assert "files" in config
 
             # Check files list
@@ -92,7 +91,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
             # Create test file
             test_file = tmp_path / "test.txt"
@@ -104,7 +103,7 @@ class TestDownloadScript:
             checksum = f"sha256:{expected_hash}"
 
             # Verify
-            result = download_data.verify_checksum(test_file, checksum)
+            result = download_training_data.verify_checksum(test_file, checksum)
             assert result is True
 
         finally:
@@ -119,7 +118,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
             # Create test file
             test_file = tmp_path / "test.txt"
@@ -131,14 +130,14 @@ class TestDownloadScript:
             )
 
             # Verify
-            result = download_data.verify_checksum(test_file, wrong_checksum)
+            result = download_training_data.verify_checksum(test_file, wrong_checksum)
             assert result is False
 
         finally:
             sys.path.pop(0)
 
     def test_verify_checksum_placeholder(self, tmp_path):
-        """Test that placeholder checksum is skipped."""
+        """Test that placeholder checksum fails verification."""
         import sys
         from pathlib import Path
 
@@ -146,7 +145,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
             # Create test file
             test_file = tmp_path / "test.txt"
@@ -155,9 +154,9 @@ class TestDownloadScript:
             # Use placeholder checksum
             placeholder_checksum = "sha256:XXXXX"
 
-            # Verify (should skip and return True)
-            result = download_data.verify_checksum(test_file, placeholder_checksum)
-            assert result is True
+            # Verify (no skip logic — placeholder fails like any wrong hash)
+            result = download_training_data.verify_checksum(test_file, placeholder_checksum)
+            assert result is False
 
         finally:
             sys.path.pop(0)
@@ -171,7 +170,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
             # Create test files
             expected_files = ["file1.db", "file2.db", "file3.h5"]
@@ -179,7 +178,7 @@ class TestDownloadScript:
                 (tmp_path / filename).write_text("test content")
 
             # Verify
-            result = download_data.verify_dataset_files(tmp_path, expected_files)
+            result = download_training_data.verify_dataset_files(tmp_path, expected_files)
             assert result is True
 
         finally:
@@ -194,7 +193,7 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
             # Create only some files
             expected_files = ["file1.db", "file2.db", "file3.h5"]
@@ -202,19 +201,19 @@ class TestDownloadScript:
             # file2.db and file3.h5 are missing
 
             # Verify
-            result = download_data.verify_dataset_files(tmp_path, expected_files)
+            result = download_training_data.verify_dataset_files(tmp_path, expected_files)
             assert result is False
 
         finally:
             sys.path.pop(0)
 
-    @patch("sys.argv", ["download_data.py", "--help"])
+    @patch("sys.argv", ["download_training_data.py", "--help"])
     def test_download_help_message(self):
         """Test that --help produces usage information."""
         import subprocess
 
         result = subprocess.run(
-            [sys.executable, "scripts/download_data.py", "--help"],
+            [sys.executable, "scripts/download_training_data.py", "--help"],
             capture_output=True,
             text=True,
         )
@@ -225,9 +224,9 @@ class TestDownloadScript:
         assert "--skip_checksum" in result.stdout
         assert "--force" in result.stdout
 
-    @patch("sys.argv", ["download_data.py", "--output-dir", "data/"])
-    def test_download_with_placeholder_url(self):
-        """Test that placeholder URL produces helpful error."""
+    @patch("sys.argv", ["download_training_data.py", "--output-dir", "data/"])
+    def test_download_with_existing_files_skips(self):
+        """Test that download is skipped when all files exist."""
         import sys
         from pathlib import Path
 
@@ -235,13 +234,17 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
-            # Should exit with error for placeholder URL
-            with pytest.raises(SystemExit) as exc_info:
-                download_data.main()
-
-            assert exc_info.value.code == 1
+            with patch("download_training_data.verify_dataset_files", return_value=True):
+                with patch("download_training_data.Path.exists", return_value=True):
+                    with patch("download_training_data.download_file") as mock_dl:
+                        try:
+                            download_training_data.main()
+                        except SystemExit:
+                            pass
+                        # When files exist, download should not be called
+                        mock_dl.assert_not_called()
 
         finally:
             sys.path.pop(0)
@@ -255,9 +258,9 @@ class TestDownloadScript:
         sys.path.insert(0, str(scripts_dir))
 
         try:
-            import download_data
+            import download_training_data
 
-            expected_files = download_data.DATASET_CONFIG["files"]
+            expected_files = download_training_data.DATASET_CONFIG["files"]
 
             # These files are required by HorizynDataModule
             required_files = [

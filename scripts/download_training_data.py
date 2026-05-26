@@ -5,7 +5,7 @@ Download Horizyn SOTA Dataset
 Downloads the SOTA dataset for reproducing the paper results.
 
 Usage:
-    python scripts/download_data.py --output-dir data/sota
+    python scripts/download_training_data.py --output-dir data/sota
 
 Requirements:
     - ~2 GB free disk space for download

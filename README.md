@@ -38,29 +38,64 @@ pip install -e .
 
 ### Download Dataset
 
-Download the SOTA dataset (~1GB):
+Download the training dataset and protein embeddings (~1GB). This provides the ~216K pre-computed ProtT5-XL protein embeddings needed by both evaluation and prediction:
 
 ```bash
-python scripts/download_data.py
+uv run python scripts/download_training_data.py
+```
+
+### Download Pre-trained Checkpoints
+
+Download both official checkpoints (~201MB each, ~402MB total):
+
+```bash
+uv run python scripts/download_checkpoint.py
+```
+
+This downloads two checkpoints:
+- **`horizyn_v1_0_dev.ckpt`** — trained on the train split only (paper-faithful); use for evaluation
+- **`horizyn_v1_0_inf.ckpt`** — trained on full data; use for prediction
+
+To download only one: `uv run python scripts/download_checkpoint.py --only dev`
+
+### Evaluate the Model
+
+Evaluate the dev checkpoint on the test set (requires both the dataset and dev checkpoint above):
+
+```bash
+uv run python scripts/evaluate.py
+```
+
+The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Expected: top-1 ≈ 32.4%.
+
+### Query with a Reaction
+
+Find the most likely catalyzing enzymes for a reaction SMILES, using the inference checkpoint against the bundled ~216K protein embeddings (requires both the dataset and inf checkpoint above):
+
+```bash
+# Example: ADP + H2O -> AMP + phosphate
+uv run python scripts/predict.py "NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](OP(=O)([O-])[O-])[C@H]1O.[H]O[H]>>NC1=NC=NC2=C1N=CN2[C@@H]1O[C@H](COP(=O)([O-])[O-])[C@@H](O)[C@H]1O.O=P([O-])([O-])O" --top-k 10
+```
+
+Use `--bidirectional` to score both forward and reverse reaction directions (averaged):
+
+```bash
+uv run python scripts/predict.py "SMILES>>SMILES" --bidirectional --top-k 20
 ```
 
 ### Train the Model
 
-Train the SOTA model (requires ~16GB RAM, single GPU with 16GB+ VRAM):
+Train the SOTA model from scratch (requires ~16GB RAM, single GPU with 16GB+ VRAM):
 
 ```bash
-python train.py --config configs/sota.yaml
+uv run python train.py --config configs/sota.yaml
 ```
 
-### Evaluate the Model
-
-Evaluate a trained model checkpoint on the test set:
+### Run Tests
 
 ```bash
-python scripts/evaluate.py --checkpoint checkpoints/epoch=99-step=XXXXX.ckpt
+uv run pytest
 ```
-
-The evaluation script computes retrieval metrics (Top-K hit rates, MRR) on the held-out test set. Checkpoints are saved during training to the `checkpoints/` directory.
 
 ## Hardware Requirements
 
@@ -99,7 +134,10 @@ horizyn/
 │   ├── sota.yaml             # SOTA configuration
 │   └── nano.yaml             # Small test configuration
 ├── scripts/                   # Helper scripts
-│   └── download_data.py      # Dataset download
+│   ├── download_training_data.py  # Training data download
+│   ├── download_checkpoint.py     # Pre-trained checkpoint download
+│   ├── predict.py                 # Query model with a reaction SMILES
+│   └── evaluate.py                # Model evaluation
 ├── train.py                   # Main training entry point
 └── tests/                     # Test suite
 ```
@@ -117,12 +155,15 @@ The Horizyn model uses a dual-encoder architecture:
 If you use this code in your research, please cite:
 
 ```bibtex
-@article{horizyn2025,
+@article{horizyn2026,
   title = {Dual-encoder contrastive learning accelerates enzyme discovery},
   author = {Rocks, Jason W. and Truong, Dat P. and Rappoport, Dmitrij and Maddrell-Mander, Sam and Martin-Alarcon, Daniel A. and Lee, Toni and Crossan, Steve and Goldford, Joshua E.},
-  journal = {bioRxiv}
-  year = {2025},
-  doi = {10.1101/2025.08.21.671639},
+  journal = {Proc. Natl. Acad. Sci. U.S.A.},
+  volume = {123},
+  number = {12},
+  pages = {e2520070123},
+  year = {2026},
+  doi = {10.1073/pnas.2520070123},
 }
 ```
 

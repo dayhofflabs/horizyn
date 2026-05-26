@@ -275,7 +275,7 @@ All metrics are logged to CSV files in the `logs/` directory.
 
 **Solutions**:
 - Verify all data paths in config point to existing files
-- Run `python scripts/download_data.py` if SOTA data missing
+- Run `python scripts/download_training_data.py` if SOTA data missing
 - Check that nanodata files exist for testing
 - Ensure file permissions allow reading
 

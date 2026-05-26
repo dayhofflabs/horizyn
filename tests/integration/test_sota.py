@@ -34,7 +34,7 @@ def check_sota_data():
         if not filepath.exists():
             pytest.skip(
                 f"SOTA data not found: {filename}. "
-                "Run 'python scripts/download_data.py' to download."
+                "Run 'python scripts/download_training_data.py' to download."
             )
 
 

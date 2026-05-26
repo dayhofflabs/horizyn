@@ -69,7 +69,7 @@ horizyn/
 │   ├── sota.yaml             # SOTA configuration
 │   └── nano.yaml             # Small test configuration
 ├── scripts/                   # Helper scripts
-│   └── download_data.py      # Dataset download
+│   └── download_training_data.py      # Dataset download
 ├── train.py                   # Main training entry point
 └── tests/                     # Test suite
 ```
@@ -726,7 +726,7 @@ Other datasets use `rename_map` to adapt their schema to this standard without m
 uv sync
 
 # Download data
-python scripts/download_data.py
+python scripts/download_training_data.py
 ```
 
 #### 2. Training
@@ -1035,7 +1035,7 @@ Only run SOTA data tests when you need to validate with production data:
 
 ```bash
 # Download SOTA data first
-python scripts/download_data.py
+python scripts/download_training_data.py
 
 # Run SOTA data validation tests (< 5 seconds)
 pytest tests/integration/test_sota.py -v
@@ -1113,7 +1113,7 @@ pytest tests/unit/test_model.py::TestMLP::test_forward -v
 Run SOTA data validation tests (requires SOTA data):
 ```bash
 # Download data first
-python scripts/download_data.py
+python scripts/download_training_data.py
 
 # Run SOTA data tests
 pytest tests/integration/test_sota.py -v
