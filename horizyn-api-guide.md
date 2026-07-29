@@ -397,8 +397,8 @@ If your work needs more than these limits, get in touch at
 ## 10. Python example
 
 The API is plain HTTP + JSON, so no SDK is needed. These examples use
-[`requests`](https://requests.readthedocs.io/) (`pip install requests`), which is
-not a dependency of this repository.
+[`requests`](https://requests.readthedocs.io/), which is a dependency of this
+repository — if you are working outside it, `pip install requests`.
 
 ### One-time: get a key
 
