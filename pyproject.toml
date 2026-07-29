@@ -22,6 +22,7 @@ dependencies = [
     "scikit-learn>=1.4.0",
     "pyyaml>=6.0",
     "requests>=2.32.0",
+    "tqdm>=4.67.0",
 ]
 
 # Specific configuration for PyTorch source (CUDA 12.1, x86_64)

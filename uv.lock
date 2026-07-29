@@ -818,6 +818,7 @@ dependencies = [
     { name = "tables", version = "3.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "tables", version = "3.10.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "torch" },
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -843,6 +844,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "tables", specifier = ">=3.9.2" },
     { name = "torch", specifier = "==2.4.0+cu121", index = "https://download.pytorch.org/whl/cu121" },
+    { name = "tqdm", specifier = ">=4.67.0" },
 ]
 
 [package.metadata.requires-dev]
