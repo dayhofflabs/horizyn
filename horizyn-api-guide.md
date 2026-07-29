@@ -156,6 +156,13 @@ Note that `top_k` is applied *before* filtering, so aggressive filters combined
 with a small `top_k` can return very few rows. Raise `top_k` if you are filtering
 hard.
 
+Cofactor names are matched as case-sensitive *substrings* of the annotation, which
+uses ChEBI-style spellings — `"NAD(+)"`, `"NADH"`, `"NADPH"`, `"Zn(2+)"`. So
+`"NAD"` matches all of `NAD(+)`, `NADH`, `NADP(+)` and `NADPH`, whereas `"NAD+"`
+matches nothing at all. Read the `cofactors` values off a few unfiltered results
+before relying on a cofactor filter. EC and transporter-class filters match by
+prefix instead.
+
 ### Response (flat list)
 
 ```json
@@ -167,7 +174,7 @@ hard.
       "name": "Alcohol dehydrogenase",
       "organism": "Escherichia coli",
       "ec_numbers": ["1.1.1.1"],
-      "cofactors": ["NAD+"],
+      "cofactors": ["NAD(+)"],
       "expression_score": 0.72,
       "tc_numbers": null,
       "organism_lineage": ["Bacteria", "Proteobacteria"],
@@ -319,7 +326,7 @@ curl "https://api.horizyn1.dayhofflabs.com/protein/P12345/details" \
   "name": "Alcohol dehydrogenase",
   "ec_numbers": ["1.1.1.1"],
   "organism": "Escherichia coli",
-  "cofactors": ["NAD+"],
+  "cofactors": ["NAD(+)"],
   "expression_score": 0.72,
   "tc_numbers": null,
   "organism_lineage": ["Bacteria", "Proteobacteria"],
@@ -443,13 +450,14 @@ def query_reaction(smiles: str, **options) -> dict:
     raise RuntimeError("still rate limited after 5 attempts")
 
 
-# Enzymes that oxidize ethanol to acetaldehyde, NAD+-dependent, and small
-# enough to be practical to express.
+# Enzymes that oxidize ethanol to acetaldehyde, using a nicotinamide cofactor,
+# and small enough to be practical to express. `top_k` is deliberately large
+# because these filters are narrow — see the note in section 4.
 data = query_reaction(
     "CCO>>CC=O",
-    top_k=200,
+    top_k=1000,
     page_size=10,
-    cofactor_include=["NAD+"],
+    cofactor_include=["NAD"],
     max_length=600,
 )
 
