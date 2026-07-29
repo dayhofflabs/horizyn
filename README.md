@@ -9,7 +9,12 @@
                          /____/                               
 ```
 
-Official implementation of the [Horizyn  model](https://www.pnas.org/doi/10.1073/pnas.2520070123) for matching reactions and enzymes. Register [here](https://horizyn.dayhofflabs.com/) to query Horizyn interactively or via the API.
+Official implementation of the [Horizyn model](https://www.pnas.org/doi/10.1073/pnas.2520070123) for matching reactions and enzymes.
+
+Two ways to use Horizyn:
+
+- **This repository** — train the model, reproduce the paper's evaluation, and run predictions locally against ~216K bundled protein embeddings. Requires a GPU.
+- **The hosted Horizyn API** — search 6.33M enzymes with annotations and filtering, no GPU required. Free API keys are issued by email; see the **[Horizyn API Guide](horizyn-api-guide.md)**.
 
 ## Overview
 
@@ -97,6 +102,41 @@ uv run python train.py --config configs/sota.yaml
 uv run pytest
 ```
 
+## Query the Hosted API
+
+If you want to screen a reaction against far more enzymes than the bundled set —
+6.33M proteins, with names, organisms, EC numbers, cofactors, literature, and
+filtering — use the hosted Horizyn API instead. It needs no GPU and no local
+data download.
+
+Getting a key takes one email round-trip:
+
+```bash
+# 1. Request a verification code
+curl -X POST https://api.horizyn1.dayhofflabs.com/keys/request \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com"}'
+
+# 2. Confirm with the code from your inbox to receive your key
+curl -X POST https://api.horizyn1.dayhofflabs.com/keys/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "code": "123456", "name": "my-project"}'
+```
+
+Then query a reaction:
+
+```bash
+curl -X POST https://api.horizyn1.dayhofflabs.com/query/reaction \
+  -H "Authorization: Bearer $HORIZYN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"smiles": "CCO>>CC=O"}'
+```
+
+Full documentation — every endpoint, request options, filtering, clustering,
+rate limits, and Python examples — is in the
+**[Horizyn API Guide](horizyn-api-guide.md)**. Interactive OpenAPI docs are at
+[api.horizyn1.dayhofflabs.com/docs](https://api.horizyn1.dayhofflabs.com/docs).
+
 ## Hardware Requirements
 
 - **RAM**: 8GB minimum (4GB for data loaded entirely in memory)
@@ -141,6 +181,11 @@ horizyn/
 ├── train.py                   # Main training entry point
 └── tests/                     # Test suite
 ```
+
+## Documentation
+
+- **[Horizyn API Guide](horizyn-api-guide.md)** — using the hosted API: get a key, call every endpoint, filter and cluster results
+- **[Horizyn User Manual](horizyn-user-manual.md)** — in-depth reference for this codebase: architecture, data pipeline, training, configuration, and testing
 
 ## Model Architecture
 
