@@ -123,13 +123,14 @@ curl -X POST https://api.horizyn1.dayhofflabs.com/keys/confirm \
   -d '{"email": "you@example.com", "code": "123456", "name": "my-project"}'
 ```
 
-Then query a reaction:
+Then query a reaction. Use balanced reactions — the example below is GabT
+transamination of 2-oxoglutarate using 6-aminohexanoate:
 
 ```bash
 curl -X POST https://api.horizyn1.dayhofflabs.com/query/reaction \
   -H "Authorization: Bearer $HORIZYN_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"smiles": "CCO>>CC=O"}'
+  -d '{"smiles": "[NH3+]CCCCCC([O-])=O.[O-]C(=O)CCC(=O)C([O-])=O>>[O-]C(=O)CCCCC=O.[NH3+][C@@H](CCC([O-])=O)C([O-])=O"}'
 ```
 
 Full documentation — every endpoint, request options, filtering, clustering,

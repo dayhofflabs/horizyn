@@ -667,7 +667,8 @@ CSV file with columns:
 | reaction_id | STRING | Unique reaction ID |
 | reaction_smiles | STRING | Reaction SMILES string |
 
-Format: `reactants>>products` (e.g., `CC(=O)O>>CO.CC(=O)`)
+Format: `reactants>>products`, balanced, with cosubstrates included (e.g. methyl
+acetate hydrolysis, `CC(=O)OC.O>>CC(=O)O.CO`)
 
 #### 4. Test Reactions (`test_rxns.csv`)
 
