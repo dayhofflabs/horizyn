@@ -14,7 +14,7 @@ Official implementation of the [Horizyn model](https://www.pnas.org/doi/10.1073/
 Two ways to use Horizyn:
 
 - **This repository** — train the model, reproduce the paper's evaluation, and run predictions locally against ~216K bundled protein embeddings. Requires a GPU.
-- **The hosted Horizyn API** — search 6.33M enzymes with annotations and filtering, no GPU required. Free API keys are issued by email; see the **[Horizyn API Guide](horizyn-api-guide.md)**.
+- **The hosted Horizyn API** — search 6.33M enzymes with annotations and filtering, no need for a GPU or to clone this repo. Free API keys are issued by email; see the **[Horizyn API Guide](horizyn-api-guide.md)**.
 
 ## Overview
 
