@@ -6,7 +6,8 @@ reaction as a SMILES string; the API returns a ranked list of candidate enzymes
 with annotations (name, organism, EC numbers, cofactors, sequence length, and
 more).
 
-Anyone can get a key — it takes one email round-trip and no account or password.
+Getting a key takes one email round-trip, a short registration and acceptance of
+the Terms of Use; there is no password.
 
 **You do not need to clone this repository to use the API.** It is plain HTTP and
 JSON against a hosted service, so a key and `curl` — or any HTTP client in any
@@ -35,8 +36,9 @@ a client in your language of choice.
   - [Table of Contents](#table-of-contents)
   - [1. Hosted API vs. this repository](#1-hosted-api-vs-this-repository)
   - [2. Get an API key](#2-get-an-api-key)
-    - [Step 1 — request a verification code](#step-1--request-a-verification-code)
-    - [Step 2 — confirm and receive your key](#step-2--confirm-and-receive-your-key)
+    - [Step 1 — read the Terms of Use](#step-1--read-the-terms-of-use)
+    - [Step 2 — request a verification code](#step-2--request-a-verification-code)
+    - [Step 3 — register, accept the terms, and receive your key](#step-3--register-accept-the-terms-and-receive-your-key)
     - [Things worth knowing](#things-worth-knowing)
   - [3. Authenticate](#3-authenticate)
   - [4. Search for enzymes by reaction](#4-search-for-enzymes-by-reaction)
@@ -53,6 +55,8 @@ a client in your language of choice.
     - [Request body size](#request-body-size)
     - [Capacity](#capacity)
   - [9. Errors](#9-errors)
+    - [Signup and access errors](#signup-and-access-errors)
+    - [Restricted molecules](#restricted-molecules)
   - [10. Python example](#10-python-example)
     - [One-time: get a key](#one-time-get-a-key)
     - [Querying](#querying)
@@ -84,10 +88,46 @@ with metadata and filtering, and without provisioning a GPU.
 
 ## 2. Get an API key
 
-Keys are issued through an email-verification flow. No account or password is
-required — just an email address you control.
+Keys are issued through email verification and a short registration. No
+password, institutional affiliation or project approval is required, and
+ordinary signups are approved automatically. Automated clients and agents use
+your key as you. If a service acts for other people, each of them needs their
+own key; do not share one key across a platform's users.
 
-### Step 1 — request a verification code
+**Keys issued before the November 2026 access update no longer work.** If you
+had one, sign up again below and replace the key in your scripts and clients.
+Nothing is carried over automatically.
+
+**Use your work email.** Common personal-email domains on a maintained list
+(for example `gmail.com`, `outlook.com`, `yahoo.com`, `icloud.com`, `proton.me`)
+cannot register or use the API. The check is the exact domain after the `@`, so
+an organization whose mail is hosted by Google or Microsoft on its own domain is
+unaffected. You do not need a `.edu` or `.gov` address, and an eligible domain is
+not treated as proof of affiliation.
+
+**Location.** Access is not available from Belarus, Cuba, Iran, North Korea,
+Russia or Syria. This is checked against the country you declare at signup and,
+on every key request and API call, the country of the network address your
+request comes from. Client-supplied headers do not change it. IP location is
+approximate: if you believe a refusal is wrong, email
+[horizyn@dayhofflabs.com](mailto:horizyn@dayhofflabs.com) rather than retrying
+through another network. IP location data:
+[IP Geolocation by DB-IP](https://db-ip.com) (CC BY 4.0).
+
+### Step 1 — read the Terms of Use
+
+```bash
+curl https://api.horizyn1.dayhofflabs.com/keys/terms
+```
+
+```json
+{"version": "…", "digest": "…", "text": "…"}
+```
+
+Read `text`. Registration requires you to send back `version` and `digest`
+exactly as returned, so your acceptance refers to the exact text you read.
+
+### Step 2 — request a verification code
 
 ```bash
 curl -X POST https://api.horizyn1.dayhofflabs.com/keys/request \
@@ -95,7 +135,8 @@ curl -X POST https://api.horizyn1.dayhofflabs.com/keys/request \
   -d '{"email": "you@example.com"}'
 ```
 
-The response is always the same, whether or not the address is deliverable:
+The response is always the same, whether or not the address is deliverable or
+eligible (no code is sent to a listed personal domain):
 
 ```json
 {"message": "If this email is valid, a verification email has been sent."}
@@ -104,21 +145,39 @@ The response is always the same, whether or not the address is deliverable:
 Check your inbox for a short verification code, sent from
 `noreply@dayhofflabs.com`.
 
-### Step 2 — confirm and receive your key
+### Step 3 — register, accept the terms, and receive your key
 
 ```bash
 curl -X POST https://api.horizyn1.dayhofflabs.com/keys/confirm \
   -H "Content-Type: application/json" \
-  -d '{"email": "you@example.com", "code": "123456", "name": "my-project"}'
+  -d '{
+        "email": "you@example.com",
+        "code": "123456",
+        "full_name": "Your Name",
+        "country": "GB",
+        "accept_terms": true,
+        "terms_version": "<version from step 1>",
+        "terms_digest": "<digest from step 1>",
+        "key_label": "my-project"
+      }'
 ```
+
+| Field | Required | Notes |
+|---|---|---|
+| `full_name` | yes | Your name (up to 200 characters). |
+| `country` | yes | Two-letter ISO 3166-1 code for where you operate. |
+| `organization` | no | The organization you represent, if any. Omit for personal use. |
+| `accept_terms` | yes | Must be `true`. |
+| `terms_version`, `terms_digest` | yes | Exactly as returned by `GET /keys/terms`. |
+| `key_label` | no | A label for your own reference. It replaces the earlier `name` field, which is now rejected. |
 
 ```json
 {"api_key": "hzk_live_xxxxxxxx..."}
 ```
 
 Store this key securely — it is shown **only once** and cannot be retrieved
-later. If you lose it, request a new one. The optional `name` field just labels
-the key for your own reference.
+later. If you lose it, repeat steps 2–3 with the same email to get another key
+on the same account.
 
 ### Things worth knowing
 
@@ -548,6 +607,33 @@ If your work needs more than these limits, get in touch at
 Error bodies name the field and the limit but never echo the value you sent, so a
 `422` on a large payload stays small.
 
+### Signup and access errors
+
+These carry a `detail.error` code:
+
+| Status | `detail.error` | Meaning |
+|---|---|---|
+| `403` | `terms_acceptance_required` | `accept_terms` was not `true`, or your account must accept the current terms (sign up again). |
+| `403` | `terms_version_mismatch` | The `terms_version`/`terms_digest` you sent is not the text currently served. Fetch `GET /keys/terms` again. |
+| `403` | `email_domain_not_eligible` | The email domain is on the personal-domain list. Sign up with an organizational address. |
+| `403` | `legal_restriction`, `product_exclusion` | Access is not available for this account. |
+| `403` | `network_legal_restriction`, `network_product_exclusion` | Access is not available from the network location this request came from. |
+| `403` | `account_suspended` | The account is suspended; no key for it works. |
+| `409` | `eligibility_review`, `operator_hold` | Access is paused pending a review. Email [horizyn@dayhofflabs.com](mailto:horizyn@dayhofflabs.com). |
+| `503` | `location_unavailable` | The request's network location could not be determined. Retry later; nothing was issued or answered. |
+
+A `network_*` or `location_unavailable` response applies to that request only;
+it does not change your account.
+
+### Restricted molecules
+
+Reaction queries and reaction validation are screened against a list of
+restricted molecules. A restricted request returns `403` with
+`reason: restricted_molecule` and a contact address. It is not an accusation or
+an account suspension, and there is no special-access exception; if you believe
+it is an error, email [horizyn@dayhofflabs.com](mailto:horizyn@dayhofflabs.com).
+This screening is not a comprehensive safety or legal-clearance guarantee.
+
 Malformed, oversized, and pathological input is answered with a `4xx`. If you do
 receive a `500`, it is a bug — please report it with the request that caused it.
 
@@ -572,12 +658,24 @@ import requests
 BASE = "https://api.horizyn1.dayhofflabs.com"
 EMAIL = "you@example.com"
 
+terms = requests.get(f"{BASE}/keys/terms", timeout=30).json()
+print(terms["text"])  # read the terms you are about to accept
+
 requests.post(f"{BASE}/keys/request", json={"email": EMAIL}, timeout=30).raise_for_status()
 code = input("Verification code from your email: ").strip()
 
 resp = requests.post(
     f"{BASE}/keys/confirm",
-    json={"email": EMAIL, "code": code, "name": "my-project"},
+    json={
+        "email": EMAIL,
+        "code": code,
+        "full_name": "Your Name",
+        "country": "GB",
+        "accept_terms": True,
+        "terms_version": terms["version"],
+        "terms_digest": terms["digest"],
+        "key_label": "my-project",
+    },
     timeout=30,
 )
 resp.raise_for_status()
@@ -658,4 +756,6 @@ experimental validation.
 ## Questions
 
 Open an issue in this repository, or email
-[info@dayhofflabs.com](mailto:info@dayhofflabs.com).
+[info@dayhofflabs.com](mailto:info@dayhofflabs.com). For access, eligibility or
+restricted-request questions, email
+[horizyn@dayhofflabs.com](mailto:horizyn@dayhofflabs.com).
