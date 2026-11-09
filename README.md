@@ -14,7 +14,7 @@ Official implementation of the [Horizyn model](https://www.pnas.org/doi/10.1073/
 Two ways to use Horizyn:
 
 - **This repository** — train the model, reproduce the paper's evaluation, and run predictions locally against ~216K bundled protein embeddings. Requires a GPU.
-- **The hosted Horizyn API** — search 6.33M enzymes with annotations and filtering, no need for a GPU or to clone this repo. Free API keys are issued by email; see the **[Horizyn API Guide](horizyn-api-guide.md)**.
+- **The hosted Horizyn API** — search 6.33M enzymes with annotations and filtering, no need for a GPU or to clone this repo. Free API keys are issued by email to eligible users who accept the Terms of Use; see the **[Horizyn API Guide](horizyn-api-guide.md)**.
 
 ## Overview
 
@@ -109,19 +109,13 @@ If you want to screen a reaction against far more enzymes than the bundled set �
 filtering — use the hosted Horizyn API instead. It needs no GPU and no local
 data download.
 
-Getting a key takes one email round-trip:
-
-```bash
-# 1. Request a verification code
-curl -X POST https://api.horizyn1.dayhofflabs.com/keys/request \
-  -H "Content-Type: application/json" \
-  -d '{"email": "you@example.com"}'
-
-# 2. Confirm with the code from your inbox to receive your key
-curl -X POST https://api.horizyn1.dayhofflabs.com/keys/confirm \
-  -H "Content-Type: application/json" \
-  -d '{"email": "you@example.com", "code": "123456", "name": "my-project"}'
-```
+Getting a key takes one email round-trip and a short registration: read the
+Terms of Use (`GET /keys/terms`), request a code (`POST /keys/request`), then
+register with your name, country and explicit acceptance of the terms
+(`POST /keys/confirm`). Use a work email address; access is not available from
+some countries. The exact requests are in
+**[the guide, section 2](horizyn-api-guide.md#2-get-an-api-key)**. Keys issued
+before the November 2026 access update no longer work; sign up again.
 
 Then query a reaction. Use balanced reactions — the example below is GabT
 transamination of 2-oxoglutarate using 6-aminohexanoate:
